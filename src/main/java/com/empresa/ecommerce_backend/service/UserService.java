@@ -3,6 +3,7 @@ package com.empresa.ecommerce_backend.service;
 import com.empresa.ecommerce_backend.dto.request.*;
 import com.empresa.ecommerce_backend.dto.response.*;
 import com.empresa.ecommerce_backend.enums.RoleName;
+import com.empresa.ecommerce_backend.enums.AuthProvider;
 import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.repository.*;
 import jakarta.transaction.Transactional;
@@ -41,6 +42,7 @@ public class UserService {
         user.setEmail(dto.getEmail());
         user.setPassword(passwordEncoder.encode(dto.getPassword()));
         user.setVerified(false);
+        user.setAuthProvider(AuthProvider.LOCAL);
 
         Role defaultRole = roleRepository.findByName(RoleName.CUSTOMER)
                 .orElseThrow(() -> new RuntimeException("Rol CUSTOMER no encontrado"));
@@ -79,6 +81,21 @@ public class UserService {
 
     public ServiceResult<LoginResponse> login(LoginRequest request) {
         try {
+            Optional<User> optionalUser = userRepository.findByEmail(request.email());
+
+            if (optionalUser.isEmpty()) {
+                return new ServiceResult<>(false, "Usuario no encontrado.", null);
+            }
+
+            User user = optionalUser.get();
+
+            // ⚠️ Usuario creado solo por OAuth (sin password)
+            if (user.getPassword() == null || user.getPassword().isBlank()) {
+                return new ServiceResult<>(false,
+                        "Este usuario no tiene contraseña configurada. Inicie sesión con Google o Microsoft.", null);
+            }
+
+            // Autenticación tradicional
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             request.email(),
@@ -96,11 +113,9 @@ public class UserService {
         }
     }
 
+
     public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto) {
         try {
-            System.out.println("👉 Provider: " + dto.getProvider());
-            System.out.println("👉 ID Token: " + (dto.getIdToken() != null ? "Recibido" : "NULO"));
-
             // Verificamos el ID Token con Nimbus
             boolean tokenValido = jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider());
             if (!tokenValido) {
@@ -119,16 +134,29 @@ public class UserService {
                         ? dto.getLastName()
                         : "OAuth";
 
+                AuthProvider provider = switch (dto.getProvider().toLowerCase()) {
+                    case "google" -> AuthProvider.GOOGLE;
+                    case "azure-ad" -> AuthProvider.AZURE_AD;
+                    default -> AuthProvider.LOCAL; // por si acaso
+                };
+
                 User nuevo = new User();
                 nuevo.setEmail(dto.getEmail());
                 nuevo.setFirstName(firstName);
                 nuevo.setLastName(lastName);
                 nuevo.setVerified(true);
-                nuevo.setPassword(UUID.randomUUID().toString());
+                nuevo.setPassword(null); // sin contraseña
+                nuevo.setAuthProvider(provider);
                 nuevo.setRoles(Set.of(customerRole));
 
                 return userRepository.save(nuevo);
             });
+
+            // Si ya existe, podés actualizar el proveedor (opcional)
+            if (user.getAuthProvider() == null) {
+                user.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
+                userRepository.save(user);
+            }
 
             Authentication auth = new UsernamePasswordAuthenticationToken(
                     user.getEmail(),
@@ -145,6 +173,8 @@ public class UserService {
             return new ServiceResult<>(false, "Error al verificar ID token", null);
         }
     }
+
+
 
 
 

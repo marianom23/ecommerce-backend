@@ -1,6 +1,6 @@
 // src/main/java/com/empresa/ecommerce_backend/model/User.java
 package com.empresa.ecommerce_backend.model;
-
+import com.empresa.ecommerce_backend.enums.AuthProvider;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -46,12 +46,16 @@ public class User {
     @ToString.Include
     private String email;
 
-    @Column(nullable = false)
-    @NotBlank
+    @Column(nullable = true)
     private String password;
 
     @Column(nullable = false)
     private boolean verified = false;
+
+    @Column(nullable = false)
+    @Enumerated(EnumType.STRING)
+    private AuthProvider authProvider = AuthProvider.LOCAL;
+
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

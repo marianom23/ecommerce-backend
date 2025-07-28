@@ -26,9 +26,6 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
-    // 🔒 Handler comentado porque usamos NextAuth en el frontend
-    // private final CustomOAuth2SuccessHandler customOAuth2SuccessHandler;
-
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
@@ -52,10 +49,6 @@ public class SecurityConfig {
                         .anyRequest().authenticated()
                 );
 
-        // 🔁 Comentado porque el frontend maneja el OAuth2
-        // .oauth2Login(oauth -> oauth
-        //         .successHandler(customOAuth2SuccessHandler)
-        // );
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
