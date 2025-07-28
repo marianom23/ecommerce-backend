@@ -98,6 +98,9 @@ public class UserService {
 
     public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto) {
         try {
+            System.out.println("👉 Provider: " + dto.getProvider());
+            System.out.println("👉 ID Token: " + (dto.getIdToken() != null ? "Recibido" : "NULO"));
+
             // Verificamos el ID Token con Nimbus
             boolean tokenValido = jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider());
             if (!tokenValido) {

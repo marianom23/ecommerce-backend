@@ -52,6 +52,9 @@ public class JwtService {
     @Value("${spring.security.oauth2.client.registration.azure.client-id}")
     private String azureClientId;
 
+    @Value("${AZURE_AD_TENANT_ID}")
+    private String azureTenantId;
+
     /**
      * Genera un token JWT con username y roles.
      */
@@ -158,7 +161,7 @@ public class JwtService {
         try {
             String issuer = switch (provider.toLowerCase()) {
                 case "google" -> "https://accounts.google.com";
-                case "azure-ad" -> "https://login.microsoftonline.com/common/v2.0";
+                case "azure-ad" -> "https://login.microsoftonline.com/" + azureTenantId + "/v2.0";
                 default -> throw new RuntimeException("Proveedor no soportado");
             };
 
@@ -174,31 +177,23 @@ public class JwtService {
                 default -> throw new RuntimeException("Proveedor no soportado para audience");
             };
 
-            // Cargar claves públicas
             JWKSource<SecurityContext> jwkSource = new RemoteJWKSet<>(new URL(jwksUri));
             ConfigurableJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
             jwtProcessor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
 
             JWTClaimsSet claimsSet = jwtProcessor.process(idToken, null);
 
-            // Validar issuer
             if (!claimsSet.getIssuer().equals(issuer)) return false;
 
-            // ✅ Validar audience (aud)
             List<String> audience = claimsSet.getAudience();
-            if (audience == null || !audience.contains(expectedAudience)) {
-                System.err.println("Audiencia inválida: " + audience);
-                return false;
-            }
+            if (audience == null || !audience.contains(expectedAudience)) return false;
 
-            // Validar expiración
             Date now = new Date();
             if (claimsSet.getExpirationTime() == null || now.after(claimsSet.getExpirationTime())) return false;
 
             return true;
 
         } catch (Exception e) {
-            System.err.println("Error verificando ID token: " + e.getMessage());
             return false;
         }
     }
