@@ -2,7 +2,7 @@ package com.empresa.ecommerce_backend.controller;
 
 import com.empresa.ecommerce_backend.dto.request.LoginRequest;
 import com.empresa.ecommerce_backend.dto.request.RegisterUserRequest;
-import com.empresa.ecommerce_backend.dto.response.LoginResponse;
+import com.empresa.ecommerce_backend.dto.request.OAuthCallbackRequest;
 import com.empresa.ecommerce_backend.dto.response.RegisterUserResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.service.UserService;
@@ -52,8 +52,13 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
-    @GetMapping("/oauth2/success")
-    public ResponseEntity<?> oauth2Success(@RequestParam("token") String jwt) {
-        return ResponseEntity.ok().body("{\"token\": \"" + jwt + "\"}");
+    @PostMapping("/oauth2/callback")
+    public ResponseEntity<?> handleOAuthCallback(@RequestBody OAuthCallbackRequest dto) {
+        var result = userService.handleOAuthCallback(dto);
+        System.out.println(result.getData());
+        if (result.isSuccess()) return ResponseEntity.ok(result.getData()); // JWT
+
+        return ResponseEntity.badRequest().body(result.getMessage());
     }
+
 }

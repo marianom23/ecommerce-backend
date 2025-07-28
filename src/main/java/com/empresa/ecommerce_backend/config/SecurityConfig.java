@@ -25,6 +25,8 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+
+    // 🔒 Handler comentado porque usamos NextAuth en el frontend
     // private final CustomOAuth2SuccessHandler customOAuth2SuccessHandler;
 
     @Bean
@@ -34,12 +36,23 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/login", "/api/register", "/api/verify-email", "/swagger-ui/**", "/api-docs/**" /*, "/oauth2/**" */).permitAll()
+                        .requestMatchers(
+                                "/api/login",
+                                "/api/register",
+                                "/api/verify-email",
+                                "/swagger-ui/**",
+                                "/api-docs/**",
+                                "/oauth2/**",
+                                "/login/**",
+                                "/api/oauth2/callback"
+                        ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/manager/**").hasAnyRole("ADMIN", "MANAGER")
                         .anyRequest().authenticated()
                 );
+
+        // 🔁 Comentado porque el frontend maneja el OAuth2
         // .oauth2Login(oauth -> oauth
         //         .successHandler(customOAuth2SuccessHandler)
         // );
@@ -63,7 +76,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of("http://localhost:3000")); // Ajusta según tu frontend
+        config.setAllowedOrigins(List.of("http://localhost:3000")); // Cambiar según tu frontend
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);

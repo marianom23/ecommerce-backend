@@ -11,6 +11,20 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.util.*;
 import java.util.stream.Collectors;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.jwk.source.RemoteJWKSet;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jose.proc.JWSKeySelector;
+import com.nimbusds.jose.proc.JWSVerificationKeySelector;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
+import com.nimbusds.jwt.SignedJWT;
+
+
+import java.net.URL;
 
 
 //⚙️ Servicio central para:
@@ -31,6 +45,12 @@ public class JwtService {
 
     @Value("${security.jwt.expiration-ms:86400000}")
     private long jwtExpirationMs;
+
+    @Value("${spring.security.oauth2.client.registration.google.client-id}")
+    private String googleClientId;
+
+    @Value("${spring.security.oauth2.client.registration.azure.client-id}")
+    private String azureClientId;
 
     /**
      * Genera un token JWT con username y roles.
@@ -133,6 +153,56 @@ public class JwtService {
             return null;
         }
     }
+
+    public boolean verifyIdToken(String idToken, String provider) {
+        try {
+            String issuer = switch (provider.toLowerCase()) {
+                case "google" -> "https://accounts.google.com";
+                case "azure-ad" -> "https://login.microsoftonline.com/common/v2.0";
+                default -> throw new RuntimeException("Proveedor no soportado");
+            };
+
+            String jwksUri = switch (provider.toLowerCase()) {
+                case "google" -> "https://www.googleapis.com/oauth2/v3/certs";
+                case "azure-ad" -> "https://login.microsoftonline.com/common/discovery/v2.0/keys";
+                default -> throw new RuntimeException("Proveedor no soportado");
+            };
+
+            String expectedAudience = switch (provider.toLowerCase()) {
+                case "google" -> googleClientId;
+                case "azure-ad" -> azureClientId;
+                default -> throw new RuntimeException("Proveedor no soportado para audience");
+            };
+
+            // Cargar claves públicas
+            JWKSource<SecurityContext> jwkSource = new RemoteJWKSet<>(new URL(jwksUri));
+            ConfigurableJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
+            jwtProcessor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
+
+            JWTClaimsSet claimsSet = jwtProcessor.process(idToken, null);
+
+            // Validar issuer
+            if (!claimsSet.getIssuer().equals(issuer)) return false;
+
+            // ✅ Validar audience (aud)
+            List<String> audience = claimsSet.getAudience();
+            if (audience == null || !audience.contains(expectedAudience)) {
+                System.err.println("Audiencia inválida: " + audience);
+                return false;
+            }
+
+            // Validar expiración
+            Date now = new Date();
+            if (claimsSet.getExpirationTime() == null || now.after(claimsSet.getExpirationTime())) return false;
+
+            return true;
+
+        } catch (Exception e) {
+            System.err.println("Error verificando ID token: " + e.getMessage());
+            return false;
+        }
+    }
+
 
 
 }

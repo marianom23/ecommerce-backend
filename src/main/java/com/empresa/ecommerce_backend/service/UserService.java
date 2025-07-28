@@ -12,7 +12,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import java.util.stream.Collectors;
 import java.util.*;
 
 @Service
@@ -92,4 +95,54 @@ public class UserService {
             return new ServiceResult<>(false, "Error de autenticación.", null);
         }
     }
+
+    public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto) {
+        try {
+            // Verificamos el ID Token con Nimbus
+            boolean tokenValido = jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider());
+            if (!tokenValido) {
+                return new ServiceResult<>(false, "ID token inválido", null);
+            }
+
+            // Buscar o registrar al usuario
+            User user = userRepository.findByEmail(dto.getEmail()).orElseGet(() -> {
+                Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
+                        .orElseThrow(() -> new RuntimeException("Rol CUSTOMER no encontrado"));
+
+                String firstName = (dto.getFirstName() != null && !dto.getFirstName().isBlank())
+                        ? dto.getFirstName()
+                        : "Usuario";
+                String lastName = (dto.getLastName() != null && !dto.getLastName().isBlank())
+                        ? dto.getLastName()
+                        : "OAuth";
+
+                User nuevo = new User();
+                nuevo.setEmail(dto.getEmail());
+                nuevo.setFirstName(firstName);
+                nuevo.setLastName(lastName);
+                nuevo.setVerified(true);
+                nuevo.setPassword(UUID.randomUUID().toString());
+                nuevo.setRoles(Set.of(customerRole));
+
+                return userRepository.save(nuevo);
+            });
+
+            Authentication auth = new UsernamePasswordAuthenticationToken(
+                    user.getEmail(),
+                    null,
+                    user.getRoles().stream()
+                            .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+                            .collect(Collectors.toList())
+            );
+
+            String jwt = jwtService.generateToken(auth);
+            return new ServiceResult<>(true, null, jwt);
+
+        } catch (Exception e) {
+            return new ServiceResult<>(false, "Error al verificar ID token", null);
+        }
+    }
+
+
+
 }
