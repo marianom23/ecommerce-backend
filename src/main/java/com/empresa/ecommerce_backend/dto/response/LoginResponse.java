@@ -1,3 +1,12 @@
 package com.empresa.ecommerce_backend.dto.response;
 
-public record LoginResponse(String token) {}
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+@Data
+@AllArgsConstructor
+public class LoginResponse {
+    private String token;
+    private String email;
+    private String role;
+}

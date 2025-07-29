@@ -12,7 +12,7 @@ import java.util.Set;
 @Table(
         name = "purchase_orders",
         indexes = {
-                @Index(name = "idx_purchase_orders_supplier", columnList = "supplier"),
+                @Index(name = "idx_purchase_orders_supplier", columnList = "supplier_id"),
                 @Index(name = "idx_purchase_orders_date", columnList = "purchaseDate")
         }
 )
@@ -29,21 +29,16 @@ public class PurchaseOrder {
     @EqualsAndHashCode.Include
     private Long id;
 
-    @Column(length = 200, nullable = false)
-    @NotNull
-    private String supplier;
-
     @Column(nullable = false)
     @NotNull
     private LocalDate purchaseDate;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "supplier_id", nullable = false)
+    @NotNull
+    private Supplier supplier;
+
     @OneToMany(mappedBy = "purchaseOrder", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<PurchaseLot> lots = new HashSet<>();
 
-    @PrePersist
-    private void prePersist() {
-        if (purchaseDate == null) {
-            purchaseDate = LocalDate.now();
-        }
-    }
 }

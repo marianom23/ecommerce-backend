@@ -64,15 +64,4 @@ public class Payment {
 
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    private void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
-        if (updatedAt == null) updatedAt = createdAt;
-        if (status == null) status = PaymentStatus.PENDING;
-    }
-
-    @PreUpdate
-    private void preUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 }

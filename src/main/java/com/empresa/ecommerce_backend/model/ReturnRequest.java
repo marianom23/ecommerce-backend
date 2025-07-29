@@ -62,9 +62,4 @@ public class ReturnRequest {
 
     private LocalDateTime resolvedAt;
 
-    @PrePersist
-    private void prePersist() {
-        if (requestedAt == null) requestedAt = LocalDateTime.now();
-        if (status == null) status = ReturnRequestStatus.PENDING;
-    }
 }

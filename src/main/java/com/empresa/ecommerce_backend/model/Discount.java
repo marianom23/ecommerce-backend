@@ -49,13 +49,4 @@ public class Discount {
     @ManyToMany(mappedBy = "discounts", fetch = FetchType.LAZY)
     private Set<Product> products = new HashSet<>();
 
-    @PrePersist
-    @PreUpdate
-    private void validateAmounts() {
-        boolean hasPerc = percentage != null && percentage.compareTo(BigDecimal.ZERO) > 0;
-        boolean hasAmt  = amount != null && amount.compareTo(BigDecimal.ZERO) > 0;
-        if (!hasPerc && !hasAmt) {
-            throw new IllegalArgumentException("Discount must have percentage or amount > 0");
-        }
-    }
 }

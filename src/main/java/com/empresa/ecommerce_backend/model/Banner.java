@@ -41,9 +41,4 @@ public class Banner {
     private LocalDateTime startAt;
     private LocalDateTime endAt;
 
-    @PrePersist
-    private void prePersist() {
-        if (active == null) active = true;
-        if (startAt == null) startAt = LocalDateTime.now();
-    }
 }

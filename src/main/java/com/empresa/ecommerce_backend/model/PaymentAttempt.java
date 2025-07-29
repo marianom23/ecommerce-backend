@@ -59,9 +59,4 @@ public class PaymentAttempt {
     @Column(length = 255)
     private String errorMessage;
 
-    @PrePersist
-    private void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
-        if (status == null) status = PaymentAttemptStatus.REQUESTED;
-    }
 }

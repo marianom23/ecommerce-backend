@@ -22,25 +22,33 @@ public class AuthController {
     private final UserServiceImpl userServiceImpl;
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody @Valid RegisterUserRequest dto) {
-        ServiceResult<RegisterUserResponse> result = userServiceImpl.registerUser(dto);
-        if (result.isSuccess()) return ResponseEntity.ok(result.getData());
-        return ResponseEntity.badRequest().body(result.getMessage());
+    public ResponseEntity<ServiceResult<RegisterUserResponse>> register(@RequestBody @Valid RegisterUserRequest dto) {
+        return ResponseEntity.ok(userServiceImpl.registerUser(dto));
     }
 
     @GetMapping("/verify-email")
-    public ResponseEntity<?> verifyEmail(@RequestParam("token") String token) {
-        var result = userServiceImpl.verifyEmail(token);
-        if (result.isSuccess()) return ResponseEntity.ok().build();
-        return ResponseEntity.badRequest().body(result.getMessage());
+    public ResponseEntity<ServiceResult<Void>> verifyEmail(@RequestParam("token") String token) {
+        return ResponseEntity.ok(userServiceImpl.verifyEmail(token));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<?> login(@RequestBody @Valid LoginRequest request, HttpServletRequest servletRequest) {
+    public ResponseEntity<ServiceResult<?>> login(@RequestBody @Valid LoginRequest request, HttpServletRequest servletRequest) {
         String ip = extractClientIp(servletRequest);
-        var result = userServiceImpl.login(request, ip);
-        if (result.isSuccess()) return ResponseEntity.ok(result.getData());
-        return ResponseEntity.badRequest().body(result.getMessage());
+        return ResponseEntity.ok(userServiceImpl.login(request, ip));
+    }
+
+    @PostMapping("/oauth2/callback")
+    public ResponseEntity<ServiceResult<String>> handleOAuthCallback(@RequestBody OAuthCallbackRequest dto, HttpServletRequest servletRequest) {
+        String ip = extractClientIp(servletRequest);
+        return ResponseEntity.ok(userServiceImpl.handleOAuthCallback(dto, ip));
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        String xfHeader = request.getHeader("X-Forwarded-For");
+        if (xfHeader != null && !xfHeader.isBlank()) {
+            return xfHeader.split(",")[0];
+        }
+        return request.getRemoteAddr();
     }
 
     @GetMapping("/me")
@@ -52,22 +60,6 @@ public class AuthController {
     public ResponseEntity<?> logout() {
         // Stateless: frontend solo elimina el token. Este endpoint es opcional.
         return ResponseEntity.ok().build();
-    }
-
-    @PostMapping("/oauth2/callback")
-    public ResponseEntity<?> handleOAuthCallback(@RequestBody OAuthCallbackRequest dto, HttpServletRequest servletRequest) {
-        String ip = extractClientIp(servletRequest);
-        var result = userServiceImpl.handleOAuthCallback(dto, ip);
-        if (result.isSuccess()) return ResponseEntity.ok(result.getData());
-        return ResponseEntity.badRequest().body(result.getMessage());
-    }
-
-    private String extractClientIp(HttpServletRequest request) {
-        String xfHeader = request.getHeader("X-Forwarded-For");
-        if (xfHeader != null && !xfHeader.isBlank()) {
-            return xfHeader.split(",")[0];
-        }
-        return request.getRemoteAddr();
     }
 
 }

@@ -45,9 +45,4 @@ public class LoginAttempt {
     @Column(length = 255)
     private String reason; // "Wrong password", "User not found", ...
 
-    @PrePersist
-    private void prePersist() {
-        if (attemptAt == null) attemptAt = LocalDateTime.now();
-        if (success == null) success = false;
-    }
 }

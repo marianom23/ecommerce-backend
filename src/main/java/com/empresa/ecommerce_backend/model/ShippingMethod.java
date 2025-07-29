@@ -38,8 +38,4 @@ public class ShippingMethod {
     @NotNull
     private Boolean active = true;
 
-    @PrePersist
-    private void prePersist() {
-        if (active == null) active = true;
-    }
 }

@@ -47,15 +47,4 @@ public class ProductCostHistory {
     @NotNull
     private LocalDateTime effectiveFrom; // Desde cuándo aplica este costo
 
-    public BigDecimal getCostWithTax() {
-        BigDecimal tax = (taxPercentage == null) ? BigDecimal.ZERO : taxPercentage;
-        return cost.add(cost.multiply(tax).divide(BigDecimal.valueOf(100)));
-    }
-
-    @PrePersist
-    private void setDefaultDate() {
-        if (effectiveFrom == null) {
-            effectiveFrom = LocalDateTime.now();
-        }
-    }
 }

@@ -54,9 +54,4 @@ public class PurchaseLot {
     @Column(length = 500)
     private String notes; // opcional, observaciones del lote
 
-    public BigDecimal getUnitCostWithTax() {
-        if (unitCost == null) return BigDecimal.ZERO;
-        BigDecimal tax = (taxPercentage == null) ? BigDecimal.ZERO : taxPercentage;
-        return unitCost.add(unitCost.multiply(tax).divide(BigDecimal.valueOf(100)));
-    }
 }

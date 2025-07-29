@@ -50,8 +50,4 @@ public class AuditLog {
     @JoinColumn(name = "user_id")
     private User user; // puede ser null (sistema)
 
-    @PrePersist
-    private void prePersist() {
-        if (timestamp == null) timestamp = LocalDateTime.now();
-    }
 }

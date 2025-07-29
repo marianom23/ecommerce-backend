@@ -35,9 +35,4 @@ public class Cart {
     @Column(nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now();
 
-    @PrePersist
-    @PreUpdate
-    private void touchTimestamp() {
-        this.updatedAt = LocalDateTime.now();
-    }
 }

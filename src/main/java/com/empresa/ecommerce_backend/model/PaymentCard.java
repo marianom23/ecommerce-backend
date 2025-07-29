@@ -57,9 +57,4 @@ public class PaymentCard {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @PrePersist
-    private void prePersist() {
-        // En caso de que quieras normalizar datos:
-        if (brand != null) brand = brand.trim().toUpperCase();
-    }
 }

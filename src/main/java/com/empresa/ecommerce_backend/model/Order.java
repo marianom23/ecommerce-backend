@@ -56,10 +56,4 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<OrderItem> items = new HashSet<>();
 
-    @PrePersist
-    private void prePersist() {
-        if (orderDate == null) orderDate = LocalDateTime.now();
-        if (status == null) status = OrderStatus.PENDING;
-        if (orderNumber == null) orderNumber = UUID.randomUUID().toString();
-    }
 }

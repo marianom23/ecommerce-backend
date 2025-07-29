@@ -62,8 +62,4 @@ public class Refund {
     @Column(columnDefinition = "TEXT")
     private String providerResponse;
 
-    @PrePersist
-    private void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
-    }
 }

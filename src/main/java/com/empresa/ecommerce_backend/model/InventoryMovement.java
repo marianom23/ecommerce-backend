@@ -55,8 +55,4 @@ public class InventoryMovement {
     @JoinColumn(name = "user_id")
     private User user; // opcional
 
-    @PrePersist
-    private void prePersist() {
-        if (movementDate == null) movementDate = LocalDateTime.now();
-    }
 }

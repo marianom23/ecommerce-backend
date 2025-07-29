@@ -45,9 +45,4 @@ public class Notification {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @PrePersist
-    private void prePersist() {
-        if (sentAt == null) sentAt = LocalDateTime.now();
-        if (read == null) read = false;
-    }
 }

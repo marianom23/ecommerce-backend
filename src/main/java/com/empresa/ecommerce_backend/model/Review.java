@@ -56,8 +56,4 @@ public class Review {
     @NotNull
     private LocalDateTime reviewDate;
 
-    @PrePersist
-    private void prePersist() {
-        if (reviewDate == null) reviewDate = LocalDateTime.now();
-    }
 }

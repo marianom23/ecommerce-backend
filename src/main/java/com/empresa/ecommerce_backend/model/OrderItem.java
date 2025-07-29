@@ -72,15 +72,4 @@ public class OrderItem {
     @JoinColumn(name = "purchase_lot_id")
     private PurchaseLot purchaseLot; // Lote desde el cual se vendió este producto
 
-    @PrePersist
-    @PreUpdate
-    private void calculateLineTotal() {
-        BigDecimal qty = BigDecimal.valueOf(quantity == null ? 0 : quantity);
-        BigDecimal price = unitPrice == null ? BigDecimal.ZERO : unitPrice;
-        BigDecimal discount = discountAmount == null ? BigDecimal.ZERO : discountAmount;
-        this.lineTotal = price.multiply(qty).subtract(discount);
-        if (this.lineTotal.compareTo(BigDecimal.ZERO) < 0) {
-            this.lineTotal = BigDecimal.ZERO;
-        }
-    }
 }

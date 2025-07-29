@@ -52,9 +52,4 @@ public class SupportTicket {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @PrePersist
-    private void prePersist() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
-        if (status == null) status = SupportTicketStatus.OPEN;
-    }
 }

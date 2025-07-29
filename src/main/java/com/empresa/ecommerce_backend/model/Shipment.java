@@ -53,8 +53,4 @@ public class Shipment {
     private LocalDateTime shippedAt;
     private LocalDateTime deliveredAt;
 
-    @PrePersist
-    private void prePersist() {
-        if (status == null) status = ShipmentStatus.PENDING;
-    }
 }

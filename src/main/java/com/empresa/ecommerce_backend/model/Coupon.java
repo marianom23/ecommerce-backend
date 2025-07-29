@@ -54,9 +54,4 @@ public class Coupon {
     @ManyToMany(mappedBy = "coupons", fetch = FetchType.LAZY)
     private Set<User> users = new HashSet<>();
 
-    @PrePersist
-    private void prePersist() {
-        if (usedCount == null) usedCount = 0;
-        if (active == null) active = true;
-    }
 }

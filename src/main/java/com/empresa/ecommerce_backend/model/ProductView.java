@@ -47,8 +47,4 @@ public class ProductView {
     @NotNull
     private LocalDateTime viewedAt;
 
-    @PrePersist
-    private void prePersist() {
-        if (viewedAt == null) viewedAt = LocalDateTime.now();
-    }
 }

@@ -55,8 +55,4 @@ public class PaymentEvent {
     @Column(columnDefinition = "TEXT")
     private String payload;
 
-    @PrePersist
-    private void prePersist() {
-        if (eventAt == null) eventAt = LocalDateTime.now();
-    }
 }

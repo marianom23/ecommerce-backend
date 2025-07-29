@@ -62,8 +62,4 @@ public class Chargeback {
     @Column(columnDefinition = "TEXT")
     private String evidence;
 
-    @PrePersist
-    private void prePersist() {
-        if (receivedAt == null) receivedAt = LocalDateTime.now();
-    }
 }

@@ -72,9 +72,4 @@ public class BankTransfer {
     @Column(length = 500)
     private String receiptUrl;
 
-    @PrePersist
-    private void prePersist() {
-        if (transferDate == null) transferDate = LocalDateTime.now();
-        if (status == null) status = BankTransferStatus.PENDING;
-    }
 }

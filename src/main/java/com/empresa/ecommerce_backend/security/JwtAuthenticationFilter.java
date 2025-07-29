@@ -1,5 +1,6 @@
 package com.empresa.ecommerce_backend.security;
 
+import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -26,7 +27,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtServiceImpl jwtServiceImpl;
+    private final JwtService jwtService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -48,10 +49,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String authHeader = request.getHeader("Authorization");
-        String token = jwtServiceImpl.extractTokenFromHeader(authHeader);
+        String token = jwtService.extractTokenFromHeader(authHeader);
 
-        if (token != null && jwtServiceImpl.isTokenValid(token)) {
-            var authentication = jwtServiceImpl.getAuthentication(token);
+        if (token != null && jwtService.isTokenValid(token)) {
+            var authentication = jwtService.getAuthentication(token);
             ((AbstractAuthenticationToken) authentication)
                     .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
