@@ -10,7 +10,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import com.empresa.ecommerce_backend.service.JwtService;
+import com.empresa.ecommerce_backend.service.JwtServiceImpl;
 
 import java.io.IOException;
 
@@ -26,7 +26,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private final JwtService jwtService;
+    private final JwtServiceImpl jwtServiceImpl;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -48,10 +48,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         String authHeader = request.getHeader("Authorization");
-        String token = jwtService.extractTokenFromHeader(authHeader);
+        String token = jwtServiceImpl.extractTokenFromHeader(authHeader);
 
-        if (token != null && jwtService.isTokenValid(token)) {
-            var authentication = jwtService.getAuthentication(token);
+        if (token != null && jwtServiceImpl.isTokenValid(token)) {
+            var authentication = jwtServiceImpl.getAuthentication(token);
             ((AbstractAuthenticationToken) authentication)
                     .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);

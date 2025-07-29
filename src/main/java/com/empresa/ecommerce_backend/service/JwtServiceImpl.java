@@ -1,5 +1,6 @@
 package com.empresa.ecommerce_backend.service;
 
+import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -18,10 +19,7 @@ import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.jwk.source.RemoteJWKSet;
 import com.nimbusds.jose.proc.SecurityContext;
-import com.nimbusds.jose.proc.JWSKeySelector;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
-import com.nimbusds.jose.util.DefaultResourceRetriever;
-import com.nimbusds.jwt.SignedJWT;
 
 
 import java.net.URL;
@@ -38,7 +36,7 @@ import java.net.URL;
 //📌 Es quien sabe firmar, verificar y extraer información de tokens.
 
 @Service
-public class JwtService {
+public class JwtServiceImpl implements JwtService {
 
     @Value("${security.jwt.secret}")
     private String jwtSecret;

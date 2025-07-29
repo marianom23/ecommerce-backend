@@ -6,6 +6,7 @@ import com.empresa.ecommerce_backend.enums.RoleName;
 import com.empresa.ecommerce_backend.enums.AuthProvider;
 import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.repository.*;
+import com.empresa.ecommerce_backend.service.interfaces.UserService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.*;
@@ -14,21 +15,20 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import java.util.stream.Collectors;
 import java.util.*;
 
 @Service
 @RequiredArgsConstructor
-public class UserService {
+public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
-    private final JwtService jwtService;
-    private final MailService mailService;
+    private final JwtServiceImpl jwtServiceImpl;
+    private final MailServiceImpl mailServiceImpl;
+    private final LoginAttemptServiceImpl loginAttemptServiceImpl;
 
     @Transactional
     public ServiceResult<RegisterUserResponse> registerUser(RegisterUserRequest dto) {
@@ -51,15 +51,15 @@ public class UserService {
         User saved = userRepository.save(user);
 
         // ✅ Generar y enviar token de verificación
-        String token = jwtService.generateEmailVerificationToken(saved.getEmail());
-        mailService.sendVerificationEmail(saved.getEmail(), token);
+        String token = jwtServiceImpl.generateEmailVerificationToken(saved.getEmail());
+        mailServiceImpl.sendVerificationEmail(saved.getEmail(), token);
 
         RegisterUserResponse response = new RegisterUserResponse(saved.getId(), saved.getEmail());
         return new ServiceResult<>(true, null, response);
     }
 
     public ServiceResult<Void> verifyEmail(String token) {
-        String email = jwtService.validateEmailVerificationToken(token);
+        String email = jwtServiceImpl.validateEmailVerificationToken(token);
         if (email == null) {
             return new ServiceResult<>(false, "Token inválido o expirado.", null);
         }
@@ -79,23 +79,23 @@ public class UserService {
         return new ServiceResult<>(true, "Cuenta verificada exitosamente.", null);
     }
 
-    public ServiceResult<LoginResponse> login(LoginRequest request) {
+    public ServiceResult<LoginResponse> login(LoginRequest request, String ip) {
         try {
             Optional<User> optionalUser = userRepository.findByEmail(request.email());
 
             if (optionalUser.isEmpty()) {
+                loginAttemptServiceImpl.logAttempt(null, ip, false, "Usuario no encontrado.");
                 return new ServiceResult<>(false, "Usuario no encontrado.", null);
             }
 
             User user = optionalUser.get();
 
-            // ⚠️ Usuario creado solo por OAuth (sin password)
             if (user.getPassword() == null || user.getPassword().isBlank()) {
+                loginAttemptServiceImpl.logAttempt(user, ip, false, "Sin contraseña (OAuth).");
                 return new ServiceResult<>(false,
                         "Este usuario no tiene contraseña configurada. Inicie sesión con Google o Microsoft.", null);
             }
 
-            // Autenticación tradicional
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             request.email(),
@@ -103,26 +103,34 @@ public class UserService {
                     )
             );
 
-            String token = jwtService.generateToken(authentication);
+            String token = jwtServiceImpl.generateToken(authentication);
+
+            loginAttemptServiceImpl.logAttempt(user, ip, true, null);
+
             return new ServiceResult<>(true, null, new LoginResponse(token));
 
         } catch (BadCredentialsException e) {
+            userRepository.findByEmail(request.email())
+                    .ifPresentOrElse(
+                            user -> loginAttemptServiceImpl.logAttempt(user, ip, false, "Credenciales inválidas."),
+                            () -> loginAttemptServiceImpl.logAttempt(null, ip, false, "Credenciales inválidas.")
+                    );
             return new ServiceResult<>(false, "Credenciales inválidas.", null);
+
         } catch (Exception e) {
+            loginAttemptServiceImpl.logAttempt(null, ip, false, "Error de autenticación.");
             return new ServiceResult<>(false, "Error de autenticación.", null);
         }
     }
 
-
-    public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto) {
+    public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto, String ip) {
         try {
-            // Verificamos el ID Token con Nimbus
-            boolean tokenValido = jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider());
+            boolean tokenValido = jwtServiceImpl.verifyIdToken(dto.getIdToken(), dto.getProvider());
             if (!tokenValido) {
+                loginAttemptServiceImpl.logAttempt(null, ip, false, "ID token inválido");
                 return new ServiceResult<>(false, "ID token inválido", null);
             }
 
-            // Buscar o registrar al usuario
             User user = userRepository.findByEmail(dto.getEmail()).orElseGet(() -> {
                 Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
                         .orElseThrow(() -> new RuntimeException("Rol CUSTOMER no encontrado"));
@@ -137,7 +145,7 @@ public class UserService {
                 AuthProvider provider = switch (dto.getProvider().toLowerCase()) {
                     case "google" -> AuthProvider.GOOGLE;
                     case "azure-ad" -> AuthProvider.AZURE_AD;
-                    default -> AuthProvider.LOCAL; // por si acaso
+                    default -> AuthProvider.LOCAL;
                 };
 
                 User nuevo = new User();
@@ -145,14 +153,13 @@ public class UserService {
                 nuevo.setFirstName(firstName);
                 nuevo.setLastName(lastName);
                 nuevo.setVerified(true);
-                nuevo.setPassword(null); // sin contraseña
+                nuevo.setPassword(null);
                 nuevo.setAuthProvider(provider);
                 nuevo.setRoles(Set.of(customerRole));
 
                 return userRepository.save(nuevo);
             });
 
-            // Si ya existe, podés actualizar el proveedor (opcional)
             if (user.getAuthProvider() == null) {
                 user.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
                 userRepository.save(user);
@@ -166,10 +173,13 @@ public class UserService {
                             .collect(Collectors.toList())
             );
 
-            String jwt = jwtService.generateToken(auth);
+            String jwt = jwtServiceImpl.generateToken(auth);
+
+            loginAttemptServiceImpl.logAttempt(user, ip, true, null); // ✅ intento exitoso
             return new ServiceResult<>(true, null, jwt);
 
         } catch (Exception e) {
+            loginAttemptServiceImpl.logAttempt(null, ip, false, "Error al verificar ID token");
             return new ServiceResult<>(false, "Error al verificar ID token", null);
         }
     }

@@ -1,4 +1,5 @@
 package com.empresa.ecommerce_backend.service;
+import com.empresa.ecommerce_backend.service.interfaces.MailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
@@ -10,7 +11,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 
 @Service
 @RequiredArgsConstructor
-public class MailService {
+public class MailServiceImpl implements MailService {
 
     private final JavaMailSender mailSender;
 

@@ -68,6 +68,10 @@ public class OrderItem {
     @Min(0)
     private BigDecimal lineTotal;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "purchase_lot_id")
+    private PurchaseLot purchaseLot; // Lote desde el cual se vendió este producto
+
     @PrePersist
     @PreUpdate
     private void calculateLineTotal() {
