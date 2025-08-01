@@ -3,21 +3,26 @@ package com.empresa.ecommerce_backend.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.springframework.http.HttpStatus;
 
 @Getter
 @AllArgsConstructor
 public class ServiceResult<T> {
-    private boolean success;
     private String message;
     private T data;
+    private HttpStatus status;
 
-    // ✅ Método estático para respuesta exitosa
-    public static <T> ServiceResult<T> success(T data) {
-        return new ServiceResult<>(true, null, data);
+    /* --------- Fábricas de utilidad --------- */
+    public static <T> ServiceResult<T> ok(T data) {
+        return new ServiceResult<>(null, data, HttpStatus.OK);
     }
-
-    // ✅ Método estático para respuesta con error
-    public static <T> ServiceResult<T> failure(String message) {
-        return new ServiceResult<>(false, message, null);
+    public static <T> ServiceResult<T> created(T data) {
+        return new ServiceResult<>(null, data, HttpStatus.CREATED);
+    }
+    public static ServiceResult<Void> noContent() {
+        return new ServiceResult<>(null, null, HttpStatus.NO_CONTENT);
+    }
+    public static <T> ServiceResult<T> error(HttpStatus st, String msg) {
+        return new ServiceResult<>(msg, null, st);
     }
 }

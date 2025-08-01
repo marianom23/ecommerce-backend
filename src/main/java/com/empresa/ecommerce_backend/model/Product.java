@@ -64,6 +64,20 @@ public class Product {
     @JoinColumn(name = "category_id")
     private Category category;
 
+    // ------ NUEVOS CAMPOS ------
+    @Column(precision = 10, scale = 3)
+    private BigDecimal weight;    // en kilogramos (ajusta si prefieres gramos)
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal length;    // en cm
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal width;     // en cm
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal height;    // en cm
+    // --------------------------
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "product_discount",

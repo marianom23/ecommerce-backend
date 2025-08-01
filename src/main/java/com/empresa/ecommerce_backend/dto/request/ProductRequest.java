@@ -28,4 +28,18 @@ public class ProductRequest {
     private Long brandId;
 
     private Long categoryId;
+
+    // Nuevo: Peso del producto en kilogramos (ajusta según la unidad que manejes)
+    @DecimalMin(value = "0.0", inclusive = false, message = "El peso debe ser mayor a 0")
+    private BigDecimal weight;
+
+    // Nuevos: Dimensiones (en cm, por ejemplo)
+    @DecimalMin(value = "0.0", inclusive = false, message = "El largo debe ser mayor a 0")
+    private BigDecimal length;
+
+    @DecimalMin(value = "0.0", inclusive = false, message = "El ancho debe ser mayor a 0")
+    private BigDecimal width;
+
+    @DecimalMin(value = "0.0", inclusive = false, message = "La altura debe ser mayor a 0")
+    private BigDecimal height;
 }
