@@ -11,6 +11,8 @@ public interface UserRepository extends BaseRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    Optional<User> findByOauthId(String oauthId);
+
     boolean existsByEmail(String email);
 
     // Para traer roles en la misma query (evitas LazyInitialization/N+1)

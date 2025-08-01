@@ -46,6 +46,9 @@ public class User {
     @ToString.Include
     private String email;
 
+    @Column(unique = true)
+    private String oauthId;  // viene del 'sub' del token de Google/Microsoft
+
     @Column(nullable = true)
     private String password;
 

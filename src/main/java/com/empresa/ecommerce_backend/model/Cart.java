@@ -10,7 +10,10 @@ import java.util.Set;
 @Entity
 @Table(
         name = "carts",
-        indexes = @Index(name = "idx_carts_user", columnList = "user_id", unique = true)
+        indexes = {
+                @Index(name = "idx_carts_user", columnList = "user_id", unique = false),
+                @Index(name = "idx_carts_session", columnList = "session_id", unique = true)
+        }
 )
 @Getter
 @Setter
@@ -20,14 +23,17 @@ import java.util.Set;
 @ToString(exclude = {"user", "items"})
 public class Cart {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @EqualsAndHashCode.Include
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, unique = true)
+    // 1) Relación opcional con usuario
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = true, unique = true)
     private User user;
+
+    // 2) Identificador de carrito anónimo
+    @Column(name = "session_id", length = 100, unique = true, nullable = true)
+    private String sessionId;
 
     @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<CartItem> items = new HashSet<>();

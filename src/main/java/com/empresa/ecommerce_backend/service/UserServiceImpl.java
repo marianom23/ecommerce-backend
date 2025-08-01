@@ -19,6 +19,14 @@ import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import com.empresa.ecommerce_backend.service.interfaces.LoginAttemptService;
 import com.empresa.ecommerce_backend.service.interfaces.MailService;
 import com.empresa.ecommerce_backend.service.interfaces.UserService;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.jwk.source.RemoteJWKSet;
+import com.nimbusds.jose.proc.JWSVerificationKeySelector;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -32,6 +40,8 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.net.URL;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -127,19 +137,23 @@ public class UserServiceImpl implements UserService {
                 );
             }
 
-            Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(
-                            request.email(),
-                            request.password()
-                    )
+            Authentication authentication = new UsernamePasswordAuthenticationToken(
+                    user.getId().toString(), // 👈 usás el ID como "username"
+                    null,
+                    user.getRoles().stream()
+                            .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+                            .collect(Collectors.toList())
             );
 
-            String token = jwtService.generateToken(authentication);
 
             loginAttemptService.logAttempt(user, ip, true, null);
 
-            LoginResponse loginResponse = userMapper.toLoginResponse(user, token);
-            return ServiceResult.ok(loginResponse); // 200 OK
+            String token = jwtService.generateToken(authentication);
+            Instant expiresAt = jwtService.getExpiration(token);
+
+            LoginResponse loginResponse = userMapper.toLoginResponse(user, token, expiresAt);
+
+            return ServiceResult.ok(loginResponse);
 
         } catch (BadCredentialsException e) {
             userRepository.findByEmail(request.email())
@@ -158,39 +172,42 @@ public class UserServiceImpl implements UserService {
     /* =================== OAUTH CALLBACK =================== */
     public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto, String ip) {
         try {
-            boolean tokenValido = jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider());
-            if (!tokenValido) {
+            if (!jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider())) {
                 loginAttemptService.logAttempt(null, ip, false, "ID token inválido");
                 return ServiceResult.error(HttpStatus.UNAUTHORIZED, "ID token inválido");
             }
 
-            User user = userRepository.findByEmail(dto.getEmail()).orElseGet(() -> {
+            String oauthId = jwtService.extractSub(dto.getIdToken(), dto.getProvider());
+            if (oauthId == null) {
+                loginAttemptService.logAttempt(null, ip, false, "No se pudo extraer el sub");
+                return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Token inválido");
+            }
+
+            // 🔍 Buscar por oauthId
+            User user = userRepository.findByOauthId(oauthId).orElseGet(() -> {
                 Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
                         .orElseThrow(() -> new RuntimeException("Rol CUSTOMER no encontrado"));
 
                 User nuevo = userMapper.fromOAuthDto(dto);
-                // ▶ Cuenta creada vía OAuth: considérala verificada
+                nuevo.setOauthId(oauthId); // <- se guarda el identificador
                 nuevo.setVerified(true);
                 nuevo.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
                 nuevo.setRoles(Set.of(customerRole));
-                // (sin password)
                 return userRepository.save(nuevo);
             });
 
-            // ▶ Si el usuario ya existía y aún no estaba verificado, márcalo como verificado ahora.
             if (!user.isVerified()) {
                 user.setVerified(true);
                 userRepository.save(user);
             }
 
-            // Si no tenía provider, guardalo (no pisamos si ya tiene uno)
             if (user.getAuthProvider() == null) {
                 user.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
                 userRepository.save(user);
             }
 
             Authentication auth = new UsernamePasswordAuthenticationToken(
-                    user.getEmail(),
+                    user.getId().toString(), // <= podés usar ID como username
                     null,
                     user.getRoles().stream()
                             .map(role -> new SimpleGrantedAuthority(role.getName().name()))
@@ -198,14 +215,17 @@ public class UserServiceImpl implements UserService {
             );
 
             String jwt = jwtService.generateToken(auth);
-
             loginAttemptService.logAttempt(user, ip, true, null);
-            return ServiceResult.ok(jwt); // 200 OK
+
+            return ServiceResult.ok(jwt);
 
         } catch (Exception e) {
             loginAttemptService.logAttempt(null, ip, false, "Error al verificar ID token");
             return ServiceResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error al verificar ID token");
         }
     }
+
+
+
 
 }

@@ -10,6 +10,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
+import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
 import com.nimbusds.jwt.JWTClaimsSet;
@@ -193,6 +194,38 @@ public class JwtServiceImpl implements JwtService {
 
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    @Override
+    public Instant getExpiration(String token) {
+        Claims claims = Jwts.parserBuilder()
+                .setSigningKey(jwtSecret.getBytes())
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+
+        Date exp = claims.getExpiration();
+        return exp != null ? exp.toInstant() : null;
+    }
+
+    public String extractSub(String idToken, String provider) {
+        try {
+            String jwksUri = switch (provider.toLowerCase()) {
+                case "google" -> "https://www.googleapis.com/oauth2/v3/certs";
+                case "azure-ad" -> "https://login.microsoftonline.com/common/discovery/v2.0/keys";
+                default -> throw new RuntimeException("Proveedor no soportado");
+            };
+
+            JWKSource<SecurityContext> jwkSource = new RemoteJWKSet<>(new URL(jwksUri));
+            ConfigurableJWTProcessor<SecurityContext> jwtProcessor = new DefaultJWTProcessor<>();
+            jwtProcessor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
+            JWTClaimsSet claimsSet = jwtProcessor.process(idToken, null);
+
+            return claimsSet.getSubject(); // sub
+
+        } catch (Exception e) {
+            return null;
         }
     }
 

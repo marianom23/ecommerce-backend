@@ -11,43 +11,46 @@ import java.math.BigDecimal;
 @Table(
         name = "cart_items",
         indexes = {
-                @Index(name = "idx_cart_items_cart", columnList = "cart_id"),
+                @Index(name = "idx_cart_items_cart",    columnList = "cart_id"),
                 @Index(name = "idx_cart_items_product", columnList = "product_id")
         },
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_cart_product",
-                columnNames = {"cart_id", "product_id"}
+                name = "uk_cart_prod_variant",
+                columnNames = {"cart_id", "product_id", "variant_id"}
         )
 )
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"cart", "product"})
+@ToString(exclude = {"cart", "product", "variant"})
 public class CartItem {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @EqualsAndHashCode.Include
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "cart_id", nullable = false)
-    @NotNull
     private Cart cart;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)
-    @NotNull
     private Product product;
 
-    @Column(nullable = false)
+    /** Variante concreta (puede ser null si no aplica) */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "variant_id")
+    private ProductVariant variant;
+
     @NotNull
     @Min(1)
+    @Column(nullable = false)
     private Integer quantity;
 
-    @Column(name = "price_at_addition", precision = 15, scale = 2, nullable = false)
     @NotNull
+    @Column(name = "price_at_addition",             precision = 15, scale = 2, nullable = false)
     private BigDecimal priceAtAddition;
+
+    @NotNull
+    @Column(name = "discounted_price_at_addition",  precision = 15, scale = 2, nullable = false)
+    private BigDecimal discountedPriceAtAddition;
 }
