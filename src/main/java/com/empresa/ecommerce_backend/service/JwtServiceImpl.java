@@ -94,9 +94,8 @@ public class JwtServiceImpl implements JwtService {
         }
     }
 
-    /**
-     * Extrae el Authentication de un token JWT válido.
-     */
+
+    @Override
     public Authentication getAuthentication(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(jwtSecret.getBytes())
@@ -106,14 +105,22 @@ public class JwtServiceImpl implements JwtService {
 
         String username = claims.getSubject();
 
+        @SuppressWarnings("unchecked")
         List<String> roles = claims.get("roles", List.class);
+        if (roles == null) roles = List.of();
 
+        // hasRole("ADMIN") -> requiere ROLE_ADMIN
         Collection<GrantedAuthority> authorities = roles.stream()
+                .filter(Objects::nonNull)
+                .map(String::trim)
+                .filter(r -> !r.isEmpty())
+                .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r) // <-- prefijo
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toList());
 
         return new UsernamePasswordAuthenticationToken(username, null, authorities);
     }
+
 
     /**
      * Extrae el token del header Authorization.
