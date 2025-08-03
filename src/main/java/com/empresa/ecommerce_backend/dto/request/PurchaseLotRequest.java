@@ -9,8 +9,9 @@ import java.math.BigDecimal;
 @Data
 public class PurchaseLotRequest {
 
-    @NotNull
     private Long productId;
+
+    private Long productVariantId;
 
     @NotNull
     @Min(1)

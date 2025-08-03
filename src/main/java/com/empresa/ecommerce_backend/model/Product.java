@@ -1,5 +1,6 @@
 package com.empresa.ecommerce_backend.model;
 
+import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -48,7 +49,7 @@ public class Product {
     @Column(nullable = false)
     @NotNull
     @Min(0)
-    private Integer stock;
+    private Integer stock = 0;
 
     @Column(length = 100, unique = true)
     private String sku;
@@ -76,7 +77,10 @@ public class Product {
 
     @Column(precision = 10, scale = 2)
     private BigDecimal height;    // en cm
-    // --------------------------
+
+    @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    private StockTrackingMode stockTrackingMode = StockTrackingMode.SIMPLE;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

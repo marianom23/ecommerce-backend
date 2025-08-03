@@ -27,7 +27,6 @@ import com.nimbusds.jose.proc.SecurityContext;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
 import com.nimbusds.jwt.proc.DefaultJWTProcessor;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,6 +38,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URL;
 import java.time.Instant;
@@ -122,13 +122,14 @@ public class UserServiceImpl implements UserService {
             Optional<User> optionalUser = userRepository.findByEmail(request.email());
 
             if (optionalUser.isEmpty()) {
-                // Evitar user enumeration → devolver 401 genérico
+                // Evitar enumeración de usuarios
                 loginAttemptService.logAttempt(null, ip, false, "Usuario no encontrado.");
                 return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.");
             }
 
             User user = optionalUser.get();
 
+            // Si la cuenta es sólo OAuth (sin password local)
             if (user.getPassword() == null || user.getPassword().isBlank()) {
                 loginAttemptService.logAttempt(user, ip, false, "Sin contraseña (OAuth).");
                 return ServiceResult.error(
@@ -137,14 +138,30 @@ public class UserServiceImpl implements UserService {
                 );
             }
 
+            // ✅ Verificación real de contraseña
+            if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+                loginAttemptService.logAttempt(user, ip, false, "Credenciales inválidas.");
+                return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.");
+            }
+
+            // (Opcional) Requerir email verificado
+            // if (!user.isVerified()) {
+            //     loginAttemptService.logAttempt(user, ip, false, "Email no verificado.");
+            //     return ServiceResult.error(HttpStatus.FORBIDDEN, "Debes verificar tu email.");
+            // }
+
+            // Construir Authentication con authorities prefijadas para hasRole("...")
             Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    user.getId().toString(), // 👈 usás el ID como "username"
+                    user.getId().toString(), // subject = ID (como venías usando)
                     null,
                     user.getRoles().stream()
-                            .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+                            .map(role -> new SimpleGrantedAuthority(
+                                    role.getName().name().startsWith("ROLE_")
+                                            ? role.getName().name()
+                                            : "ROLE_" + role.getName().name()
+                            ))
                             .collect(Collectors.toList())
             );
-
 
             loginAttemptService.logAttempt(user, ip, true, null);
 
@@ -152,13 +169,12 @@ public class UserServiceImpl implements UserService {
             Instant expiresAt = jwtService.getExpiration(token);
 
             LoginResponse loginResponse = userMapper.toLoginResponse(user, token, expiresAt);
-
             return ServiceResult.ok(loginResponse);
 
         } catch (BadCredentialsException e) {
             userRepository.findByEmail(request.email())
                     .ifPresentOrElse(
-                            user -> loginAttemptService.logAttempt(user, ip, false, "Credenciales inválidas."),
+                            u -> loginAttemptService.logAttempt(u, ip, false, "Credenciales inválidas."),
                             () -> loginAttemptService.logAttempt(null, ip, false, "Credenciales inválidas.")
                     );
             return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.");
@@ -168,6 +184,7 @@ public class UserServiceImpl implements UserService {
             return ServiceResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error de autenticación.");
         }
     }
+
 
     /* =================== OAUTH CALLBACK =================== */
     public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto, String ip) {

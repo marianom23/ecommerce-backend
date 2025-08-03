@@ -4,10 +4,12 @@ package com.empresa.ecommerce_backend.service;
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
 import com.empresa.ecommerce_backend.dto.response.ProductResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.ProductMapper;
 import com.empresa.ecommerce_backend.model.Product;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
+import com.empresa.ecommerce_backend.repository.ProductVariantRepository;
 import com.empresa.ecommerce_backend.service.interfaces.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,6 +23,7 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
+    private final ProductVariantRepository productVariantRepository; // <-- inyectar
 
     @Override
     public ServiceResult<ProductResponse> createProduct(ProductRequest dto) {
@@ -29,19 +32,33 @@ public class ProductServiceImpl implements ProductService {
         }
 
         Product entity = productMapper.toEntity(dto);
+        entity.setStockTrackingMode(StockTrackingMode.SIMPLE); // <-- por defecto
+
         Product saved = productRepository.save(entity);
         ProductResponse response = productMapper.toResponse(saved);
-        return ServiceResult.created(response); // 201 Created
+        // opcional: si querés setear stock efectivo en la respuesta:
+        // response.setStock(saved.getStock());
+
+        return ServiceResult.created(response);
     }
 
     @Override
     public ServiceResult<List<ProductResponse>> getAllProducts() {
         List<ProductResponse> list = productRepository.findAll()
                 .stream()
-                .map(productMapper::toResponse)
+                .map(p -> {
+                    ProductResponse r = productMapper.toResponse(p);
+                    // opcional: stock efectivo
+                    // if (p.getStockTrackingMode() == StockTrackingMode.VARIANT) {
+                    //     r.setStock(productVariantRepository.sumStockByProductId(p.getId()));
+                    // } else {
+                    //     r.setStock(p.getStock());
+                    // }
+                    return r;
+                })
                 .toList();
 
-        return ServiceResult.ok(list); // 200 OK
+        return ServiceResult.ok(list);
     }
 
     @Override
@@ -49,6 +66,13 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
 
-        return ServiceResult.ok(productMapper.toResponse(product)); // 200 OK
+        ProductResponse r = productMapper.toResponse(product);
+        // opcional: stock efectivo
+        // if (product.getStockTrackingMode() == StockTrackingMode.VARIANT) {
+        //     r.setStock(productVariantRepository.sumStockByProductId(product.getId()));
+        // } else {
+        //     r.setStock(product.getStock());
+        // }
+        return ServiceResult.ok(r);
     }
 }

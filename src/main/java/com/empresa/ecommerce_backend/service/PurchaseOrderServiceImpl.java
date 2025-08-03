@@ -4,14 +4,17 @@ package com.empresa.ecommerce_backend.service;
 import com.empresa.ecommerce_backend.dto.request.PurchaseOrderRequest;
 import com.empresa.ecommerce_backend.dto.response.PurchaseOrderResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.PurchaseLotMapper;
 import com.empresa.ecommerce_backend.mapper.PurchaseOrderMapper;
 import com.empresa.ecommerce_backend.model.Product;
+import com.empresa.ecommerce_backend.model.ProductVariant;
 import com.empresa.ecommerce_backend.model.PurchaseLot;
 import com.empresa.ecommerce_backend.model.PurchaseOrder;
 import com.empresa.ecommerce_backend.model.Supplier;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
+import com.empresa.ecommerce_backend.repository.ProductVariantRepository; // <-- NUEVO
 import com.empresa.ecommerce_backend.repository.PurchaseOrderRepository;
 import com.empresa.ecommerce_backend.repository.SupplierRepository;
 import com.empresa.ecommerce_backend.service.interfaces.PurchaseOrderService;
@@ -28,6 +31,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
 
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final ProductRepository productRepository;
+    private final ProductVariantRepository productVariantRepository;
     private final SupplierRepository supplierRepository;
     private final PurchaseOrderMapper purchaseOrderMapper;
     private final PurchaseLotMapper purchaseLotMapper;
@@ -36,43 +40,74 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     @Transactional
     public ServiceResult<PurchaseOrderResponse> createPurchaseOrder(PurchaseOrderRequest dto) {
 
-        // Validación básica del request
         if (dto.getLots() == null || dto.getLots().isEmpty()) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "La orden debe incluir al menos un lote.");
         }
 
-        // 1) Proveedor
         Supplier supplier = supplierRepository.findById(dto.getSupplierId())
-                .orElseThrow(() ->
-                        new RecursoNoEncontradoException("Proveedor no encontrado con ID: " + dto.getSupplierId()));
+                .orElseThrow(() -> new RecursoNoEncontradoException("Proveedor no encontrado con ID: " + dto.getSupplierId()));
 
-        // 2) Orden
         PurchaseOrder purchaseOrder = purchaseOrderMapper.toEntity(dto);
         purchaseOrder.setSupplier(supplier);
 
-        // 3) Lotes + relaciones + stock
         List<PurchaseLot> lotEntities = dto.getLots().stream().map(lotDto -> {
-            Product product = productRepository.findById(lotDto.getProductId())
-                    .orElseThrow(() ->
-                            new RecursoNoEncontradoException("Producto no encontrado con ID: " + lotDto.getProductId()));
 
+            ProductVariant variant = null;
+            if (lotDto.getProductVariantId() != null) {
+                variant = productVariantRepository.findById(lotDto.getProductVariantId())
+                        .orElseThrow(() -> new RecursoNoEncontradoException(
+                                "Variante no encontrada con ID: " + lotDto.getProductVariantId()));
+            }
+
+            Product product;
+            if (variant != null) {
+                product = variant.getProduct();
+                if (lotDto.getProductId() != null && !product.getId().equals(lotDto.getProductId())) {
+                    throw new IllegalArgumentException("productId no coincide con el producto de la variante " + variant.getId());
+                }
+            } else {
+                if (lotDto.getProductId() == null) {
+                    throw new IllegalArgumentException("Debe enviar productId o productVariantId en cada lote.");
+                }
+                product = productRepository.findById(lotDto.getProductId())
+                        .orElseThrow(() -> new RecursoNoEncontradoException(
+                                "Producto no encontrado con ID: " + lotDto.getProductId()));
+            }
+
+            // ---- Validación según modo ----
+            if (product.getStockTrackingMode() == StockTrackingMode.VARIANT) {
+                if (variant == null) {
+                    throw new IllegalArgumentException("El producto " + product.getId() + " opera por variantes. Debe indicar productVariantId.");
+                }
+            } else { // SIMPLE
+                if (variant != null) {
+                    throw new IllegalArgumentException("El producto " + product.getId() + " es SIMPLE. No debe indicar productVariantId.");
+                }
+            }
+
+            // Mapear lote y setear relaciones
             PurchaseLot lot = purchaseLotMapper.toEntity(lotDto);
-            lot.setProduct(product);
             lot.setPurchaseOrder(purchaseOrder);
+            lot.setProduct(product);
+            lot.setProductVariant(variant);
 
-            // Actualizar stock (JPA hará dirty checking al commit)
-            product.setStock(product.getStock() + lot.getQuantity());
+            // ---- Stock ----
+            if (variant != null) {
+                // Modo VARIANT (o al menos vino variante): solo variante
+                variant.setStock(variant.getStock() + lot.getQuantity());
+            } else {
+                // Modo SIMPLE: solo producto
+                product.setStock(product.getStock() + lot.getQuantity());
+            }
 
             return lot;
         }).toList();
 
         purchaseOrder.getLots().addAll(lotEntities);
 
-        // 4) Guardar y responder
         PurchaseOrder saved = purchaseOrderRepository.save(purchaseOrder);
         PurchaseOrderResponse response = purchaseOrderMapper.toResponse(saved);
-
-        // 201 Created
         return ServiceResult.created(response);
     }
 }
+

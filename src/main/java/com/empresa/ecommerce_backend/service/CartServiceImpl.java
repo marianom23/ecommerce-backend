@@ -1,5 +1,5 @@
 // src/main/java/com/empresa/ecommerce_backend/service/impl/CartServiceImpl.java
-package com.empresa.ecommerce_backend.service.impl;
+package com.empresa.ecommerce_backend.service;
 
 import com.empresa.ecommerce_backend.dto.request.AddItemRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateQtyRequest;

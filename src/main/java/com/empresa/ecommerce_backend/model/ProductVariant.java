@@ -43,7 +43,7 @@ public class ProductVariant {
     @Column(nullable = false)
     @NotNull
     @Min(0)
-    private Integer stock;
+    private Integer stock = 0;
 
     @Column(length = 1000)
     private String attributesJson; // {"size":"M","color":"Red"}
