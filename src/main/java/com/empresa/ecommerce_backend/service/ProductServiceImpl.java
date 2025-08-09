@@ -89,13 +89,16 @@ public class ProductServiceImpl implements ProductService {
         Pageable pageable = productPageMapper.toPageable(params);
 
         Page<Product> result = Boolean.TRUE.equals(params.getInStockOnly())
-                ? productRepository.findByStockGreaterThan(0, pageable) // solo con stock
-                : productRepository.findAll(pageable);                  // todos
+                ? productRepository.findByStockGreaterThan(0, pageable)
+                : productRepository.findAll(pageable);
 
-        PaginatedResponse<ProductResponse> response = productPageMapper.toPaginatedResponse(result, params);
+        // Mapear usando TU ProductMapper (acá sí aplica title/imgs/discount)
+        Page<ProductResponse> mapped = result.map(productMapper::toResponse);
+
+        PaginatedResponse<ProductResponse> response =
+                productPageMapper.toPaginatedResponse(mapped, params);
+
         return ServiceResult.ok(response);
     }
-
-
 
 }

@@ -54,8 +54,10 @@ public class Product {
     @Column(length = 100, unique = true)
     private String sku;
 
-    @Column(length = 500)
-    private String imageUrl;
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("position ASC")
+    private Set<ProductImage> images = new HashSet<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "brand_id")

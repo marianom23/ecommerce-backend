@@ -120,7 +120,6 @@ public class DataSeeder {
                 product.setLength(BigDecimal.valueOf(25.0));
                 product.setWidth(BigDecimal.valueOf(15.0));
                 product.setHeight(BigDecimal.valueOf(10.0));
-                product.setImageUrl("https://example.com/producto" + i + ".jpg");
 
                 // Relacionar categoría y marca (ya creadas por seedBrands / seedCategories)
                 Category category = categoryRepository.findById(1L).orElseThrow();

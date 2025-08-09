@@ -13,35 +13,23 @@ import org.springframework.data.domain.Sort;
 
 import java.util.List;
 
-@Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
+@Mapper(componentModel = "spring")
 public interface ProductPageMapper {
 
-    // Reutilizamos el mapper de Product → ProductResponse
-    ProductResponse toResponse(Product product);
-
-    // Opcional: si quieres que también mapee listas
-    default List<ProductResponse> toResponseList(List<Product> products) {
-        return products.stream().map(this::toResponse).toList();
-    }
-
-    // Construye el Pageable a partir del DTO (con límites y page-1)
     default Pageable toPageable(ProductPaginatedRequest p) {
         int page = Math.max(1, p.getPage()) - 1;
         int limit = Math.max(1, Math.min(100, p.getLimit()));
-
-        // Ajusta esta lógica según tus opciones de sort
-        Sort sort = "latest".equalsIgnoreCase(p.getSort())
+        String sortField = (p.getSort() == null || p.getSort().isBlank()) ? "id" : p.getSort();
+        Sort sort = "latest".equalsIgnoreCase(sortField)
                 ? Sort.by("id").descending()
-                : Sort.by(p.getSort()).ascending();
-
+                : Sort.by(sortField).ascending();
         return PageRequest.of(page, limit, sort);
     }
 
-    // Arma la respuesta paginada completa
-    default PaginatedResponse<ProductResponse> toPaginatedResponse(Page<Product> page, ProductPaginatedRequest params) {
-        List<ProductResponse> items = page.getContent().stream().map(this::toResponse).toList();
+    // <-- genérico: sirve para cualquier Page<T>
+    default <T> PaginatedResponse<T> toPaginatedResponse(Page<T> page, ProductPaginatedRequest params) {
         return new PaginatedResponse<>(
-                items,
+                page.getContent(),
                 page.getTotalElements(),
                 params.getPage(),
                 params.getLimit(),
