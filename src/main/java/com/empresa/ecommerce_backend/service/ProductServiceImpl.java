@@ -1,17 +1,24 @@
 // src/main/java/com/empresa/ecommerce_backend/service/ProductServiceImpl.java
 package com.empresa.ecommerce_backend.service;
 
+import com.empresa.ecommerce_backend.dto.request.ProductPaginatedRequest;
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
+import com.empresa.ecommerce_backend.dto.response.PaginatedResponse;
 import com.empresa.ecommerce_backend.dto.response.ProductResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.ProductMapper;
+import com.empresa.ecommerce_backend.mapper.ProductPageMapper;
 import com.empresa.ecommerce_backend.model.Product;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
 import com.empresa.ecommerce_backend.repository.ProductVariantRepository;
 import com.empresa.ecommerce_backend.service.interfaces.ProductService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +30,7 @@ public class ProductServiceImpl implements ProductService {
 
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
+    private final ProductPageMapper productPageMapper;
     private final ProductVariantRepository productVariantRepository; // <-- inyectar
 
     @Override
@@ -75,4 +83,19 @@ public class ProductServiceImpl implements ProductService {
         // }
         return ServiceResult.ok(r);
     }
+
+    @Override
+    public ServiceResult<PaginatedResponse<ProductResponse>> getAllProductsPaged(ProductPaginatedRequest params) {
+        Pageable pageable = productPageMapper.toPageable(params);
+
+        Page<Product> result = Boolean.TRUE.equals(params.getInStockOnly())
+                ? productRepository.findByStockGreaterThan(0, pageable) // solo con stock
+                : productRepository.findAll(pageable);                  // todos
+
+        PaginatedResponse<ProductResponse> response = productPageMapper.toPaginatedResponse(result, params);
+        return ServiceResult.ok(response);
+    }
+
+
+
 }

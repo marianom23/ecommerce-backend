@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.util.Set;
 
 @Component
@@ -21,6 +22,7 @@ public class DataSeeder {
     private final CategoryRepository categoryRepository;
     private final PasswordEncoder passwordEncoder;
     private final SupplierRepository supplierRepository;
+    private final ProductRepository productRepository;
 
     @PostConstruct
     public void seedData() {
@@ -29,6 +31,7 @@ public class DataSeeder {
         seedBrands();
         seedCategories();
         seedSuppliers();
+        seedProducts();
     }
 
     private void seedRoles() {
@@ -104,5 +107,34 @@ public class DataSeeder {
             return supplierRepository.save(supplier);
         });
     }
+
+    private void seedProducts() {
+        if (productRepository.count() == 0) {
+            for (int i = 1; i <= 50; i++) {
+                Product product = new Product();
+                product.setName("Producto de prueba " + i);
+                product.setDescription("Descripción del producto " + i);
+                product.setPrice(BigDecimal.valueOf(100.0 + i));
+                product.setSku("SKU-" + String.format("%03d", i));
+                product.setWeight(BigDecimal.valueOf(1.25));
+                product.setLength(BigDecimal.valueOf(25.0));
+                product.setWidth(BigDecimal.valueOf(15.0));
+                product.setHeight(BigDecimal.valueOf(10.0));
+                product.setImageUrl("https://example.com/producto" + i + ".jpg");
+
+                // Relacionar categoría y marca (ya creadas por seedBrands / seedCategories)
+                Category category = categoryRepository.findById(1L).orElseThrow();
+                Brand brand = brandRepository.findById(1L).orElseThrow();
+                product.setCategory(category);
+                product.setBrand(brand);
+
+                // Si manejás stock
+                product.setStock(0);
+
+                productRepository.save(product);
+            }
+        }
+    }
+
 
 }

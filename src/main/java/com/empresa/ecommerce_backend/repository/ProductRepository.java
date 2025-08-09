@@ -4,6 +4,8 @@ package com.empresa.ecommerce_backend.repository;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.Query;
 
@@ -32,4 +34,6 @@ public interface ProductRepository extends BaseRepository<Product, Long> {
     // Ejemplo JPQL para traer precio promedio por categoría (por si lo usas)
     @Query("select avg(p.price) from Product p where p.category.id = :categoryId")
     Double avgPriceByCategory(Long categoryId);
+
+    Page<Product> findByStockGreaterThan(int stock, Pageable pageable);
 }
