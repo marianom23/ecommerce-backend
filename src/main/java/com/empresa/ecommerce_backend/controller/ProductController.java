@@ -4,8 +4,10 @@ package com.empresa.ecommerce_backend.controller;
 import com.empresa.ecommerce_backend.dto.request.ProductPaginatedRequest;
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
 import com.empresa.ecommerce_backend.dto.response.PaginatedResponse;
+import com.empresa.ecommerce_backend.dto.response.ProductDetailsResponse;
 import com.empresa.ecommerce_backend.dto.response.ProductResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.service.interfaces.ProductDetailsService;
 import com.empresa.ecommerce_backend.service.interfaces.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import java.util.List;
 public class ProductController {
 
     private final ProductService productService;
+    private final ProductDetailsService productDetailsService;
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
@@ -44,5 +47,10 @@ public class ProductController {
     @GetMapping("/{id}")
     public ServiceResult<ProductResponse> getProductById(@PathVariable Long id) {
         return productService.getProductById(id); // -> 200 OK o 404 vía excepción/advice
+    }
+
+    @GetMapping("/{id}/details")
+    public ServiceResult<ProductDetailsResponse> getProductDetails(@PathVariable Long id) {
+        return productDetailsService.getDetails(id); // -> 200 OK (ServiceResult.ok)
     }
 }

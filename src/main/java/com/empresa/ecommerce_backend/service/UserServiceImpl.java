@@ -187,54 +187,75 @@ public class UserServiceImpl implements UserService {
 
 
     /* =================== OAUTH CALLBACK =================== */
-    public ServiceResult<String> handleOAuthCallback(OAuthCallbackRequest dto, String ip) {
+    public ServiceResult<LoginResponse> handleOAuthCallback(OAuthCallbackRequest dto, String ip) {
         try {
+            // 1) Validar id_token del proveedor
             if (!jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider())) {
                 loginAttemptService.logAttempt(null, ip, false, "ID token inválido");
                 return ServiceResult.error(HttpStatus.UNAUTHORIZED, "ID token inválido");
             }
 
+            // 2) Extraer "sub" (oauthId) del id_token
             String oauthId = jwtService.extractSub(dto.getIdToken(), dto.getProvider());
             if (oauthId == null) {
                 loginAttemptService.logAttempt(null, ip, false, "No se pudo extraer el sub");
                 return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Token inválido");
             }
 
-            // 🔍 Buscar por oauthId
+            // 3) Buscar (o crear) usuario por oauthId
             User user = userRepository.findByOauthId(oauthId).orElseGet(() -> {
                 Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
                         .orElseThrow(() -> new RuntimeException("Rol CUSTOMER no encontrado"));
 
                 User nuevo = userMapper.fromOAuthDto(dto);
-                nuevo.setOauthId(oauthId); // <- se guarda el identificador
+                nuevo.setOauthId(oauthId);
                 nuevo.setVerified(true);
                 nuevo.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
                 nuevo.setRoles(Set.of(customerRole));
                 return userRepository.save(nuevo);
             });
 
-            if (!user.isVerified()) {
-                user.setVerified(true);
-                userRepository.save(user);
-            }
-
+            // 4) Normalizaciones (verified/proveedor/nombres si vienen)
+            boolean dirty = false;
+            if (!user.isVerified()) { user.setVerified(true); dirty = true; }
             if (user.getAuthProvider() == null) {
                 user.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
-                userRepository.save(user);
+                dirty = true;
             }
+            if (dto.getFirstName() != null && !dto.getFirstName().isBlank() && !dto.getFirstName().equals(user.getFirstName())) {
+                user.setFirstName(dto.getFirstName()); dirty = true;
+            }
+            if (dto.getLastName() != null && !dto.getLastName().isBlank() && !dto.getLastName().equals(user.getLastName())) {
+                user.setLastName(dto.getLastName()); dirty = true;
+            }
+            if (dto.getEmail() != null && !dto.getEmail().isBlank() && !dto.getEmail().equals(user.getEmail())) {
+                user.setEmail(dto.getEmail()); dirty = true;
+            }
+            if (dirty) userRepository.save(user);
 
+            // 5) Construir Authentication con prefijo ROLE_ (igual que en login)
             Authentication auth = new UsernamePasswordAuthenticationToken(
-                    user.getId().toString(), // <= podés usar ID como username
+                    user.getId().toString(),
                     null,
                     user.getRoles().stream()
-                            .map(role -> new SimpleGrantedAuthority(role.getName().name()))
+                            .map(role -> new SimpleGrantedAuthority(
+                                    role.getName().name().startsWith("ROLE_")
+                                            ? role.getName().name()
+                                            : "ROLE_" + role.getName().name()
+                            ))
                             .collect(Collectors.toList())
             );
 
+            // 6) Generar JWT + expiración (igual que login)
             String jwt = jwtService.generateToken(auth);
+            Instant expiresAt = jwtService.getExpiration(jwt);
+
             loginAttemptService.logAttempt(user, ip, true, null);
 
-            return ServiceResult.ok(jwt);
+            // 7) Armar el MISMO DTO de respuesta que /login
+            LoginResponse loginResponse = userMapper.toLoginResponse(user, jwt, expiresAt);
+
+            return ServiceResult.ok(loginResponse);
 
         } catch (Exception e) {
             loginAttemptService.logAttempt(null, ip, false, "Error al verificar ID token");

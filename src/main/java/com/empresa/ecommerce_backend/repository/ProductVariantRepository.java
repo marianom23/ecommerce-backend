@@ -2,6 +2,7 @@
 package com.empresa.ecommerce_backend.repository;
 
 import com.empresa.ecommerce_backend.model.ProductVariant;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -11,6 +12,10 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     Optional<ProductVariant> findByIdAndProductId(Long id, Long productId);
     List<ProductVariant> findAllByProductId(Long productId);
+
+    @EntityGraph(attributePaths = "images")
+    List<ProductVariant> findAllByProductIdOrderByIdAsc(Long productId);
+
     boolean existsBySku(String sku);
     boolean existsByProductId(Long productId);
     long countByProductId(Long productId);

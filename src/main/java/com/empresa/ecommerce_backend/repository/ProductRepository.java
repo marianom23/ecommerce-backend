@@ -13,6 +13,29 @@ import com.empresa.ecommerce_backend.model.Product;
 
 public interface ProductRepository extends BaseRepository<Product, Long> {
 
+
+    @Query(
+            value = """
+      select p
+      from Product p
+      where (p.stock > 0)
+         or exists (
+              select 1 from ProductVariant v
+              where v.product = p and v.stock > 0
+         )
+      """,
+            countQuery = """
+      select count(p)
+      from Product p
+      where (p.stock > 0)
+         or exists (
+              select 1 from ProductVariant v
+              where v.product = p and v.stock > 0
+         )
+      """
+    )
+    Page<Product> findInStock(Pageable pageable);
+
     Optional<Product> findBySku(String sku);
 
     boolean existsBySku(String sku);
@@ -20,6 +43,9 @@ public interface ProductRepository extends BaseRepository<Product, Long> {
     List<Product> findByCategory_Id(Long categoryId);
 
     List<Product> findByBrand_Id(Long brandId);
+
+    @EntityGraph(attributePaths = { "images", "brand", "category", "discounts", "tags" })
+    Optional<Product> findWithDetailsById(Long id);
 
     // Buscar por nombre (case-insensitive, contiene)
     List<Product> findByNameContainingIgnoreCase(String namePart);

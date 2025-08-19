@@ -3,6 +3,7 @@ package com.empresa.ecommerce_backend.controller;
 import com.empresa.ecommerce_backend.dto.request.LoginRequest;
 import com.empresa.ecommerce_backend.dto.request.OAuthCallbackRequest;
 import com.empresa.ecommerce_backend.dto.request.RegisterUserRequest;
+import com.empresa.ecommerce_backend.dto.response.LoginResponse;
 import com.empresa.ecommerce_backend.dto.response.RegisterUserResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.service.UserServiceImpl;
@@ -89,7 +90,7 @@ public class AuthController {
             @ApiResponse(responseCode = "200", description = "Callback procesado correctamente"),
             @ApiResponse(responseCode = "400", description = "Error en el callback")
     })
-    public ServiceResult<String> handleOAuthCallback(
+    public ServiceResult<LoginResponse> handleOAuthCallback(
             @RequestBody
             @Parameter(description = "Datos del callback OAuth2", required = true)
             OAuthCallbackRequest dto,

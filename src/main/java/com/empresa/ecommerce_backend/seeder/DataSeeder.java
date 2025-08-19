@@ -121,16 +121,22 @@ public class DataSeeder {
                 product.setWidth(BigDecimal.valueOf(15.0));
                 product.setHeight(BigDecimal.valueOf(10.0));
 
-                // Relacionar categoría y marca (ya creadas por seedBrands / seedCategories)
                 Category category = categoryRepository.findById(1L).orElseThrow();
                 Brand brand = brandRepository.findById(1L).orElseThrow();
                 product.setCategory(category);
                 product.setBrand(brand);
-
-                // Si manejás stock
                 product.setStock(0);
 
+                ProductImage img = new ProductImage();
+                img.setProduct(product);
+                img.setUrl("https://picsum.photos/seed/product-" + i + "/1200/800");
+                img.setAltText("Imagen del producto " + i);
+                img.setPosition(1);
+                
+                product.getImages().add(img);
+
                 productRepository.save(product);
+
             }
         }
     }
