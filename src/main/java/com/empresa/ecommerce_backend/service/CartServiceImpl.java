@@ -6,10 +6,7 @@ import com.empresa.ecommerce_backend.dto.request.UpdateQtyRequest;
 import com.empresa.ecommerce_backend.dto.response.CartResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.mapper.CartMapper;
-import com.empresa.ecommerce_backend.model.Cart;
-import com.empresa.ecommerce_backend.model.CartItem;
-import com.empresa.ecommerce_backend.model.Product;
-import com.empresa.ecommerce_backend.model.ProductVariant;
+import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.repository.CartItemRepository;
 import com.empresa.ecommerce_backend.repository.CartRepository;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
@@ -36,6 +33,92 @@ public class CartServiceImpl implements CartService {
     private final ProductRepository productRepository;
     private final ProductVariantRepository variantRepository;
     private final CartMapper cartMapper;
+
+
+    @Override
+    @Transactional
+    public ServiceResult<CartResponse> attachCartToUser(String sessionId, Long userId) {
+        if (userId == null) throw new IllegalArgumentException("userId requerido");
+
+        // Traemos ambos con lock para evitar carreras
+        Optional<Cart> userCartOpt   = cartRepository.lockByUserId(userId);
+        Optional<Cart> sessionCartOpt = (sessionId != null && !sessionId.isBlank())
+                ? cartRepository.lockBySessionId(sessionId) : Optional.empty();
+
+        // Caso 1: no hay ningun carrito -> crear para el usuario
+        if (userCartOpt.isEmpty() && sessionCartOpt.isEmpty()) {
+            Cart c = new Cart();
+            User u = new User(); u.setId(userId);
+            c.setUser(u);
+            c.setItems(new HashSet<>());
+            Cart saved = cartRepository.save(c);
+            return ServiceResult.ok(cartMapper.toResponse(saved));
+        }
+
+        // Caso 2: hay sólo carrito de usuario -> devolverlo
+        if (userCartOpt.isPresent() && sessionCartOpt.isEmpty()) {
+            return ServiceResult.ok(cartMapper.toResponse(userCartOpt.get()));
+        }
+
+        // Caso 3: hay sólo carrito de sesión -> lo “adoptamos” al usuario
+        if (userCartOpt.isEmpty() && sessionCartOpt.isPresent()) {
+            Cart sessionCart = sessionCartOpt.get();
+            User u = new User(); u.setId(userId);
+            sessionCart.setUser(u);
+            Cart saved = cartRepository.save(sessionCart);
+            return ServiceResult.ok(cartMapper.toResponse(saved));
+        }
+
+        // Caso 4: existen ambos y son distintos -> merge
+        Cart userCart = userCartOpt.get();
+        Cart sessionCart = sessionCartOpt.get();
+
+        if (!userCart.getId().equals(sessionCart.getId())) {
+            for (CartItem si : sessionCart.getItems()) {
+                Product product = si.getProduct();     // ya está loaded por JPA (LAZY -> asegúrate de acceso dentro TX)
+                ProductVariant variant = si.getVariant();
+
+                Optional<CartItem> existingOpt =
+                        cartItemRepository.findByCartAndProductAndVariant(userCart, product, variant);
+
+                int stock = (variant != null) ? variant.getStock() : product.getStock();
+                int baseQty = existingOpt.map(CartItem::getQuantity).orElse(0);
+                int mergedQty = Math.min(baseQty + si.getQuantity(), stock);
+
+                if (existingOpt.isEmpty()) {
+                    if (mergedQty <= 0) continue;
+                    CartItem ni = new CartItem();
+                    ni.setCart(userCart);
+                    ni.setProduct(product);
+                    ni.setVariant(variant);
+                    ni.setQuantity(mergedQty);
+                    // Conservamos el modelo de precios “al agregar”
+                    ni.setPriceAtAddition(si.getPriceAtAddition());
+                    ni.setDiscountedPriceAtAddition(si.getDiscountedPriceAtAddition());
+                    userCart.getItems().add(ni);
+                } else {
+                    CartItem ei = existingOpt.get();
+                    if (mergedQty == 0) {
+                        userCart.getItems().remove(ei);
+                        cartItemRepository.delete(ei);
+                    } else {
+                        ei.setQuantity(mergedQty);
+                        // Opcional: no tocar priceAtAddition para mantener histórico del item previo
+                    }
+                }
+            }
+
+            // Borramos el carrito de sesión para liberar el UNIQUE de session_id si no lo necesitás más
+            // (opcional: podés conservarlo con el mismo user para continuidad post-logout)
+            cartItemRepository.deleteAll(sessionCart.getItems());
+            sessionCart.getItems().clear();
+            cartRepository.delete(sessionCart);
+        }
+
+        Cart saved = cartRepository.save(userCart);
+        return ServiceResult.ok(cartMapper.toResponse(saved));
+    }
+
 
     /* =================== GET/CREATE =================== */
     @Override
@@ -130,6 +213,46 @@ public class CartServiceImpl implements CartService {
         Cart saved = cartRepository.save(cart);
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
+
+    @Override
+    @Transactional
+    public ServiceResult<CartResponse> incrementItem(String sessionId, Long itemId) {
+        Cart cart = cartRepository.findBySessionId(sessionId)
+                .orElseThrow(() -> new EntityNotFoundException("Carrito no encontrado"));
+
+        CartItem item = cartItemRepository.findByIdAndCartId(itemId, cart.getId())
+                .orElseThrow(() -> new EntityNotFoundException("Ítem no encontrado en el carrito"));
+
+        int stock = (item.getVariant() != null) ? item.getVariant().getStock() : item.getProduct().getStock();
+        int newQty = item.getQuantity() + 1;
+
+        if (newQty > stock) {
+            return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + stock);
+        }
+
+        item.setQuantity(newQty);
+        cart.setUpdatedAt(LocalDateTime.now());
+        Cart saved = cartRepository.save(cart);
+        return ServiceResult.ok(cartMapper.toResponse(saved));
+    }
+
+    @Override
+    @Transactional
+    public ServiceResult<CartResponse> decrementItem(String sessionId, Long itemId) {
+        Cart cart = cartRepository.findBySessionId(sessionId)
+                .orElseThrow(() -> new EntityNotFoundException("Carrito no encontrado"));
+
+        CartItem item = cartItemRepository.findByIdAndCartId(itemId, cart.getId())
+                .orElseThrow(() -> new EntityNotFoundException("Ítem no encontrado en el carrito"));
+
+        int newQty = Math.max(1, item.getQuantity() - 1); // 👈 nunca baja de 1
+        item.setQuantity(newQty);
+
+        cart.setUpdatedAt(LocalDateTime.now());
+        Cart saved = cartRepository.save(cart);
+        return ServiceResult.ok(cartMapper.toResponse(saved));
+    }
+
 
     /* =================== REMOVE ITEM =================== */
     @Override

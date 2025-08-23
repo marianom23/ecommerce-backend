@@ -14,7 +14,8 @@ import java.net.URL;
 import java.time.Instant;
 public interface JwtService {
 
-    String generateToken(Authentication authentication);
+
+    String generateToken(Authentication authentication, Long userId);
 
     boolean isTokenValid(String token);
 

@@ -8,6 +8,8 @@ import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 
 public interface CartService {
 
+    ServiceResult<CartResponse> attachCartToUser(String sessionId, Long userId);
+
     ServiceResult<CartResponse> getOrCreateBySession(String sessionId);
 
     ServiceResult<CartResponse> addItem(String sessionId, AddItemRequest dto);
@@ -17,4 +19,8 @@ public interface CartService {
     ServiceResult<CartResponse> removeItem(String sessionId, Long itemId);
 
     ServiceResult<CartResponse> clear(String sessionId);
+
+    ServiceResult<CartResponse> incrementItem(String sessionId, Long itemId);
+
+    ServiceResult<CartResponse> decrementItem(String sessionId, Long itemId);
 }

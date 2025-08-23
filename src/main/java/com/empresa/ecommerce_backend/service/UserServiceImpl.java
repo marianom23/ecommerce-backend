@@ -165,7 +165,7 @@ public class UserServiceImpl implements UserService {
 
             loginAttemptService.logAttempt(user, ip, true, null);
 
-            String token = jwtService.generateToken(authentication);
+            String token = jwtService.generateToken(authentication, user.getId());
             Instant expiresAt = jwtService.getExpiration(token);
 
             LoginResponse loginResponse = userMapper.toLoginResponse(user, token, expiresAt);
@@ -247,7 +247,7 @@ public class UserServiceImpl implements UserService {
             );
 
             // 6) Generar JWT + expiración (igual que login)
-            String jwt = jwtService.generateToken(auth);
+            String jwt = jwtService.generateToken(auth, user.getId());
             Instant expiresAt = jwtService.getExpiration(jwt);
 
             loginAttemptService.logAttempt(user, ip, true, null);

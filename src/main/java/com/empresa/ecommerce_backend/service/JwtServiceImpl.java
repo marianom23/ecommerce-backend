@@ -1,5 +1,6 @@
 package com.empresa.ecommerce_backend.service;
 
+import com.empresa.ecommerce_backend.security.AuthUser;
 import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
@@ -54,30 +55,30 @@ public class JwtServiceImpl implements JwtService {
     @Value("${AZURE_AD_TENANT_ID}")
     private String azureTenantId;
 
-    /**
-     * Genera un token JWT con username y roles.
-     */
-    public String generateToken(Authentication authentication) {
+    @Override
+    public String generateToken(Authentication authentication, Long userId) {
         String username = authentication.getName();
 
-        List<String> roles = authentication.getAuthorities()
-                .stream()
+        List<String> roles = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .collect(Collectors.toList());
+                .toList();
 
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
-
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
 
-        return Jwts.builder()
+        JwtBuilder builder = Jwts.builder()
                 .setSubject(username)
                 .claim("roles", roles)
                 .setIssuedAt(now)
                 .setExpiration(expiryDate)
-                .signWith(key, SignatureAlgorithm.HS256)
-                .compact();
+                .signWith(key, SignatureAlgorithm.HS256);
+
+        if (userId != null) builder.claim("uid", userId); // 👈 guardamos el id
+        return builder.compact();
     }
+
+
 
     /**
      * Verifica si un token es válido.
@@ -109,17 +110,23 @@ public class JwtServiceImpl implements JwtService {
         List<String> roles = claims.get("roles", List.class);
         if (roles == null) roles = List.of();
 
-        // hasRole("ADMIN") -> requiere ROLE_ADMIN
         Collection<GrantedAuthority> authorities = roles.stream()
                 .filter(Objects::nonNull)
                 .map(String::trim)
                 .filter(r -> !r.isEmpty())
-                .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r) // <-- prefijo
+                .map(r -> r.startsWith("ROLE_") ? r : "ROLE_" + r)
                 .map(SimpleGrantedAuthority::new)
                 .collect(Collectors.toList());
 
-        return new UsernamePasswordAuthenticationToken(username, null, authorities);
+        Long uid = null;
+        Object rawUid = claims.get("uid");
+        if (rawUid instanceof Number n) uid = n.longValue();
+        else if (rawUid instanceof String s && !s.isBlank()) uid = Long.parseLong(s);
+
+        var principal = new AuthUser(uid, username, "", authorities);
+        return new UsernamePasswordAuthenticationToken(principal, null, authorities);
     }
+
 
 
     /**

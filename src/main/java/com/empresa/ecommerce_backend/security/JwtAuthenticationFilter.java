@@ -37,13 +37,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // ⛔️ Ignorar filtros para rutas públicas
+        // Ignorar solo rutas realmente públicas donde no interesa ni evaluar token
         if (path.startsWith("/api/login") ||
                 path.startsWith("/api/register") ||
                 path.startsWith("/api/verify-email") ||
                 path.startsWith("/swagger-ui") ||
                 path.startsWith("/api-docs")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
 
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             filterChain.doFilter(request, response);
             return;
         }
@@ -53,9 +57,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null && jwtService.isTokenValid(token)) {
             var authentication = jwtService.getAuthentication(token);
-            ((AbstractAuthenticationToken) authentication)
-                    .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+            if (authentication != null) {
+                ((AbstractAuthenticationToken) authentication)
+                        .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                SecurityContextHolder.getContext().setAuthentication(authentication);
+            }
         }
 
         filterChain.doFilter(request, response);

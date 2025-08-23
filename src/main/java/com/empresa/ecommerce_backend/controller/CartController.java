@@ -11,6 +11,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,6 +22,21 @@ public class CartController {
 
     private final CartService cartService;
     private final CartCookieManager cookieManager;
+
+    @PreAuthorize("isAuthenticated()")
+    @PostMapping("/attach")
+    public ServiceResult<CartResponse> attachToUser(
+            @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String sessionId,
+            @AuthenticationPrincipal(expression = "id") Long userId,
+            HttpServletRequest request,
+            HttpServletResponse response
+    ) {
+        var result = cartService.attachCartToUser(sessionId, userId);
+        cookieManager.maybeSetSessionCookie(sessionId, result, request, response);
+        return result;
+    }
+
+
 
     @GetMapping("/me")
     public ServiceResult<CartResponse> getMyCart(
@@ -51,6 +68,22 @@ public class CartController {
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String sessionId
     ) {
         return cartService.updateQuantity(sessionId, itemId, dto);
+    }
+
+    @PatchMapping("/items/{itemId}/increment")
+    public ServiceResult<CartResponse> incrementItem(
+            @PathVariable Long itemId,
+            @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String sessionId
+    ) {
+        return cartService.incrementItem(sessionId, itemId);
+    }
+
+    @PatchMapping("/items/{itemId}/decrement")
+    public ServiceResult<CartResponse> decrementItem(
+            @PathVariable Long itemId,
+            @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String sessionId
+    ) {
+        return cartService.decrementItem(sessionId, itemId);
     }
 
     @DeleteMapping("/items/{itemId}")

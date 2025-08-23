@@ -29,10 +29,11 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(c -> c.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
-                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        // Público real
                         .requestMatchers(
                                 "/api/login",
                                 "/api/register",
@@ -41,23 +42,41 @@ public class SecurityConfig {
                                 "/api-docs/**",
                                 "/oauth2/**",
                                 "/login/**",
-                                "/api/oauth2/callback",
-                                // ⬇⬇⬇ LIBERAR CARRITO
-                                "/api/cart/**"
+                                "/api/oauth2/callback"
                         ).permitAll()
+
+                        // ⛔️ SOLO attach requiere auth (todos los métodos sobre esa ruta)
+                        .requestMatchers("/api/cart/attach").authenticated()
+
+                        // ✅ TODO lo demás de carrito es público (GET/POST/PUT/DELETE, etc.)
+                        .requestMatchers("/api/cart/**").permitAll()
+
+                        // Productos (lectura pública)
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/products").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/purchase-orders").hasRole("ADMIN")
+
+                        // Productos/variants solo ADMIN
+                        .requestMatchers(HttpMethod.POST,   "/api/products/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT,    "/api/products/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST,   "/api/variants/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT,    "/api/variants/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/variants/**").hasRole("ADMIN")
+
+                        // Zonas admin/manager ya existentes
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/manager/**").hasAnyRole("ADMIN", "MANAGER")
-                        // Preflight CORS (opcional pero útil)
+
+                        // Preflight CORS
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                        // Resto autenticado
                         .anyRequest().authenticated()
                 );
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
+
 
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
