@@ -5,6 +5,8 @@ import com.empresa.ecommerce_backend.dto.request.AddItemRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateQtyRequest;
 import com.empresa.ecommerce_backend.dto.response.CartResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.enums.StockTrackingMode;
+import com.empresa.ecommerce_backend.exception.NeedsVariantException;
 import com.empresa.ecommerce_backend.mapper.CartMapper;
 import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.repository.CartItemRepository;
@@ -148,7 +150,11 @@ public class CartServiceImpl implements CartService {
         Product product = productRepository.findById(dto.getProductId())
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado"));
 
-        // Validar que la variante exista y pertenezca al producto
+        if (product.getStockTrackingMode() == StockTrackingMode.VARIANT && dto.getVariantId() == null) {
+            throw new NeedsVariantException("Este producto requiere que selecciones una variante", product.getId());
+        }
+
+        // Validar variante si viene
         ProductVariant variant = null;
         if (dto.getVariantId() != null) {
             variant = variantRepository.findByIdAndProductId(dto.getVariantId(), product.getId())
@@ -187,6 +193,7 @@ public class CartServiceImpl implements CartService {
         Cart saved = cartRepository.save(cart);
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
+
 
     /* =================== UPDATE QTY =================== */
     @Override

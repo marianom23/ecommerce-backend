@@ -25,4 +25,7 @@ public class ServiceResult<T> {
     public static <T> ServiceResult<T> error(HttpStatus st, String msg) {
         return new ServiceResult<>(msg, null, st);
     }
+    public static <T> ServiceResult<T> error(HttpStatus st, String msg, T data) {
+        return new ServiceResult<>(msg, data, st);
+    }
 }

@@ -40,7 +40,7 @@ public class CartCookieManager {
         ResponseCookie cookie = ResponseCookie.from(CART_COOKIE, sessionId)
                 .httpOnly(true)
                 .secure(secure)    // dev (HTTP): false, prod (HTTPS): true
-                .sameSite("Lax")
+                .sameSite("None")
                 .path("/")
                 .maxAge(Duration.ofDays(30))
                 .build();

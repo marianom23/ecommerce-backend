@@ -2,7 +2,9 @@
 package com.empresa.ecommerce_backend.advice;
 
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.exception.EmailDuplicadoException;
 import com.empresa.ecommerce_backend.exception.EmailSendingException;
+import com.empresa.ecommerce_backend.exception.NeedsVariantException;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.ConstraintViolationException;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -125,6 +128,25 @@ public class ServiceResultAdvice implements ResponseBodyAdvice<Object> {
         // log.error("Error inesperado", ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Error interno.");
     }
+
+    @ExceptionHandler(NeedsVariantException.class)
+    public ResponseEntity<ServiceResult<Map<String,Object>>> handleNeedsVariant(NeedsVariantException ex) {
+        var payload = Map.<String,Object>of(
+                "code", "NEEDS_VARIANT",
+                "productId", ex.getProductId()
+        );
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY) // 422
+                .body(ServiceResult.error(HttpStatus.UNPROCESSABLE_ENTITY, ex.getMessage(), payload));
+    }
+
+
+    @ExceptionHandler(EmailDuplicadoException.class)
+    public ResponseEntity<ServiceResult<Map<String,Object>>> handleEmailDup(EmailDuplicadoException ex) {
+        var payload = Map.<String,Object>of("code", "EMAIL_DUPLICADO");
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ServiceResult.error(HttpStatus.CONFLICT, ex.getMessage(), payload));
+    }
+
 
     /* ---------------------- Helper ---------------------- */
     private ResponseEntity<ServiceResult<Void>> build(HttpStatus status, String message) {
