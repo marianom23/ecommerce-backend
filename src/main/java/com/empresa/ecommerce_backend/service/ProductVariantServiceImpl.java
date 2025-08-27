@@ -52,26 +52,17 @@ public class ProductVariantServiceImpl implements ProductVariantService {
             return ServiceResult.error(HttpStatus.CONFLICT, "SKU de variante ya existe.");
         }
 
-        // Si no hay variantes aún, vamos a VARIANT
-        if (!variantRepository.existsByProductId(productId)) {
-            // Política sugerida: no permitir cambio si tiene stock > 0
-            if (product.getStock() > 0) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST,
-                        "No puede habilitar variantes mientras el producto tiene stock > 0. Ajuste o migre el stock primero.");
-            }
-            product.setStockTrackingMode(StockTrackingMode.VARIANT);
-        }
-
         var v = new ProductVariant();
         v.setProduct(product);
         v.setSku(req.getSku());
         v.setPrice(req.getPrice());
         v.setAttributesJson(req.getAttributesJson());
-        // v.setStock(0); // si el campo es int=0 o Integer=0 por defecto, no hace falta
+        v.setStock(0);
 
         var saved = variantRepository.save(v);
         return ServiceResult.created(mapper.toResponse(saved));
     }
+
 
     @Override
     @Transactional
@@ -95,15 +86,16 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         var variant = variantRepository.findByIdAndProductId(variantId, productId)
                 .orElseThrow(() -> new EntityNotFoundException("Variante no encontrada"));
 
-        var product = variant.getProduct();
-        variantRepository.delete(variant);
-
-        // Si no quedan variantes, volvemos a SIMPLE
-        if (variantRepository.countByProductId(product.getId()) == 0) {
-            product.setStockTrackingMode(StockTrackingMode.SIMPLE);
+        long remaining = variantRepository.countByProductId(productId);
+        if (remaining <= 1) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "No puede eliminar la última variante del producto. Debe existir al menos una variante.");
         }
+
+        variantRepository.delete(variant);
         return ServiceResult.ok(null);
     }
+
 
     private void ensureProductExists(Long productId) {
         if (!productRepository.existsById(productId)) {

@@ -39,18 +39,23 @@ public interface CartMapper {
         Product p = ci.getProduct();
         ProductVariant v = ci.getVariant();
 
-        BigDecimal unitPrice = (v != null && v.getPrice() != null) ? v.getPrice() : p.getPrice();
-        BigDecimal unitDiscounted = unitPrice; // MVP sin descuentos (luego aplicá los del producto/variante)
+        if (v == null) {
+            throw new IllegalStateException("El ítem de carrito debe tener una variante asociada");
+            // o si preferís: return null; pero lo mejor es no permitir carrito sin variante
+        }
+
+        BigDecimal unitPrice = v.getPrice(); // 👈 siempre desde la variante
+        BigDecimal unitDiscounted = unitPrice; // luego aplicar descuentos si corresponde
         BigDecimal qty = BigDecimal.valueOf(ci.getQuantity());
         BigDecimal subtotal = unitDiscounted.multiply(qty);
 
         return CartItemResponse.builder()
                 .id(ci.getId())
                 .productId(p.getId())
-                .variantId(v != null ? v.getId() : null)
+                .variantId(v.getId())
                 .name(p.getName())
-                .imageUrl(resolvePrimaryImageUrl(p, v)) // <-- reemplaza p.getImageUrl()
-                .attributesJson(v != null ? v.getAttributesJson() : null)
+                .imageUrl(resolvePrimaryImageUrl(p, v))
+                .attributesJson(v.getAttributesJson())
                 .unitPrice(unitPrice)
                 .unitDiscountedPrice(unitDiscounted)
                 .priceAtAddition(ci.getPriceAtAddition())
@@ -59,6 +64,7 @@ public interface CartMapper {
                 .subtotal(subtotal)
                 .build();
     }
+
 
     /**
      * Devuelve la URL principal de imagen para la línea del carrito:

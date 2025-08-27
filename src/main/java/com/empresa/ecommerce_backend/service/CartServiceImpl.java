@@ -5,7 +5,6 @@ import com.empresa.ecommerce_backend.dto.request.AddItemRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateQtyRequest;
 import com.empresa.ecommerce_backend.dto.response.CartResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
-import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import com.empresa.ecommerce_backend.exception.NeedsVariantException;
 import com.empresa.ecommerce_backend.mapper.CartMapper;
 import com.empresa.ecommerce_backend.model.*;
@@ -36,14 +35,13 @@ public class CartServiceImpl implements CartService {
     private final ProductVariantRepository variantRepository;
     private final CartMapper cartMapper;
 
-
     @Override
     @Transactional
     public ServiceResult<CartResponse> attachCartToUser(String sessionId, Long userId) {
         if (userId == null) throw new IllegalArgumentException("userId requerido");
 
         // Traemos ambos con lock para evitar carreras
-        Optional<Cart> userCartOpt   = cartRepository.lockByUserId(userId);
+        Optional<Cart> userCartOpt    = cartRepository.lockByUserId(userId);
         Optional<Cart> sessionCartOpt = (sessionId != null && !sessionId.isBlank())
                 ? cartRepository.lockBySessionId(sessionId) : Optional.empty();
 
@@ -77,13 +75,18 @@ public class CartServiceImpl implements CartService {
 
         if (!userCart.getId().equals(sessionCart.getId())) {
             for (CartItem si : sessionCart.getItems()) {
-                Product product = si.getProduct();     // ya está loaded por JPA (LAZY -> asegúrate de acceso dentro TX)
-                ProductVariant variant = si.getVariant();
+                Product product = si.getProduct();
+                ProductVariant variant = si.getVariant(); // 👈 obligatorio en modelo nuevo
+
+                if (variant == null) {
+                    // Si tenés datos viejos sin variante, podés saltarlos o fallar
+                    continue;
+                }
 
                 Optional<CartItem> existingOpt =
                         cartItemRepository.findByCartAndProductAndVariant(userCart, product, variant);
 
-                int stock = (variant != null) ? variant.getStock() : product.getStock();
+                int stock = safeStock(variant.getStock());
                 int baseQty = existingOpt.map(CartItem::getQuantity).orElse(0);
                 int mergedQty = Math.min(baseQty + si.getQuantity(), stock);
 
@@ -110,8 +113,7 @@ public class CartServiceImpl implements CartService {
                 }
             }
 
-            // Borramos el carrito de sesión para liberar el UNIQUE de session_id si no lo necesitás más
-            // (opcional: podés conservarlo con el mismo user para continuidad post-logout)
+            // Limpieza del carrito de sesión
             cartItemRepository.deleteAll(sessionCart.getItems());
             sessionCart.getItems().clear();
             cartRepository.delete(sessionCart);
@@ -120,7 +122,6 @@ public class CartServiceImpl implements CartService {
         Cart saved = cartRepository.save(userCart);
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
-
 
     /* =================== GET/CREATE =================== */
     @Override
@@ -150,19 +151,16 @@ public class CartServiceImpl implements CartService {
         Product product = productRepository.findById(dto.getProductId())
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado"));
 
-        if (product.getStockTrackingMode() == StockTrackingMode.VARIANT && dto.getVariantId() == null) {
+        // En modelo variante-only, la variante es obligatoria
+        if (dto.getVariantId() == null) {
             throw new NeedsVariantException("Este producto requiere que selecciones una variante", product.getId());
         }
 
-        // Validar variante si viene
-        ProductVariant variant = null;
-        if (dto.getVariantId() != null) {
-            variant = variantRepository.findByIdAndProductId(dto.getVariantId(), product.getId())
-                    .orElseThrow(() -> new EntityNotFoundException(
-                            "La variante indicada no existe para este producto"));
-        }
+        ProductVariant variant = variantRepository
+                .findByIdAndProductId(dto.getVariantId(), product.getId())
+                .orElseThrow(() -> new EntityNotFoundException("La variante indicada no existe para este producto"));
 
-        BigDecimal listPrice = (variant != null) ? variant.getPrice() : product.getPrice();
+        BigDecimal listPrice = variant.getPrice();
         BigDecimal discounted = listPrice; // MVP sin descuentos
 
         Optional<CartItem> existing = cartItemRepository.findByCartAndProductAndVariant(cart, product, variant);
@@ -170,7 +168,7 @@ public class CartServiceImpl implements CartService {
 
         int newQty = (item != null ? item.getQuantity() : 0) + dto.getQuantity();
 
-        int stock = (variant != null) ? variant.getStock() : product.getStock();
+        int stock = safeStock(variant.getStock());
         if (newQty > stock) {
             return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + stock);
         }
@@ -194,7 +192,6 @@ public class CartServiceImpl implements CartService {
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
 
-
     /* =================== UPDATE QTY =================== */
     @Override
     @Transactional
@@ -209,7 +206,11 @@ public class CartServiceImpl implements CartService {
             cart.getItems().remove(item);
             cartItemRepository.delete(item);
         } else {
-            int stock = (item.getVariant() != null) ? item.getVariant().getStock() : item.getProduct().getStock();
+            ProductVariant v = item.getVariant();
+            if (v == null) {
+                return ServiceResult.error(HttpStatus.CONFLICT, "Ítem inválido: falta la variante");
+            }
+            int stock = safeStock(v.getStock());
             if (dto.getQuantity() > stock) {
                 return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + stock);
             }
@@ -230,7 +231,12 @@ public class CartServiceImpl implements CartService {
         CartItem item = cartItemRepository.findByIdAndCartId(itemId, cart.getId())
                 .orElseThrow(() -> new EntityNotFoundException("Ítem no encontrado en el carrito"));
 
-        int stock = (item.getVariant() != null) ? item.getVariant().getStock() : item.getProduct().getStock();
+        ProductVariant v = item.getVariant();
+        if (v == null) {
+            return ServiceResult.error(HttpStatus.CONFLICT, "Ítem inválido: falta la variante");
+        }
+
+        int stock = safeStock(v.getStock());
         int newQty = item.getQuantity() + 1;
 
         if (newQty > stock) {
@@ -259,7 +265,6 @@ public class CartServiceImpl implements CartService {
         Cart saved = cartRepository.save(cart);
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
-
 
     /* =================== REMOVE ITEM =================== */
     @Override
@@ -311,5 +316,9 @@ public class CartServiceImpl implements CartService {
         c.setItems(new HashSet<>());
         c.setUpdatedAt(LocalDateTime.now());
         return cartRepository.save(c);
+    }
+
+    private int safeStock(Integer stock) {
+        return stock == null ? 0 : stock;
     }
 }

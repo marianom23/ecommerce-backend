@@ -18,20 +18,22 @@ public interface ProductRepository extends BaseRepository<Product, Long> {
             value = """
       select p
       from Product p
-      where (p.stock > 0)
-         or exists (
-              select 1 from ProductVariant v
-              where v.product = p and v.stock > 0
-         )
+      where exists (
+          select 1
+          from ProductVariant v
+          where v.product = p
+            and coalesce(v.stock, 0) > 0
+      )
       """,
             countQuery = """
       select count(p)
       from Product p
-      where (p.stock > 0)
-         or exists (
-              select 1 from ProductVariant v
-              where v.product = p and v.stock > 0
-         )
+      where exists (
+          select 1
+          from ProductVariant v
+          where v.product = p
+            and coalesce(v.stock, 0) > 0
+      )
       """
     )
     Page<Product> findInStock(Pageable pageable);
@@ -54,12 +56,4 @@ public interface ProductRepository extends BaseRepository<Product, Long> {
     @EntityGraph(attributePaths = {"discounts", "tags"})
     Optional<Product> findWithDiscountsAndTagsById(Long id);
 
-    // Ejemplo: productos con stock bajo
-    List<Product> findByStockLessThan(Integer threshold);
-
-    // Ejemplo JPQL para traer precio promedio por categoría (por si lo usas)
-    @Query("select avg(p.price) from Product p where p.category.id = :categoryId")
-    Double avgPriceByCategory(Long categoryId);
-
-    Page<Product> findByStockGreaterThan(int stock, Pageable pageable);
 }

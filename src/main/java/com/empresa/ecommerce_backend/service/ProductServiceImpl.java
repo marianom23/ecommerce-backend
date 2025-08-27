@@ -1,4 +1,3 @@
-// src/main/java/com/empresa/ecommerce_backend/service/ProductServiceImpl.java
 package com.empresa.ecommerce_backend.service;
 
 import com.empresa.ecommerce_backend.dto.request.ProductPaginatedRequest;
@@ -6,21 +5,20 @@ import com.empresa.ecommerce_backend.dto.request.ProductRequest;
 import com.empresa.ecommerce_backend.dto.response.PaginatedResponse;
 import com.empresa.ecommerce_backend.dto.response.ProductResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
-import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.ProductMapper;
 import com.empresa.ecommerce_backend.mapper.ProductPageMapper;
 import com.empresa.ecommerce_backend.model.Product;
+import com.empresa.ecommerce_backend.model.ProductVariant;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
 import com.empresa.ecommerce_backend.repository.ProductVariantRepository;
 import com.empresa.ecommerce_backend.service.interfaces.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -31,22 +29,34 @@ public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
     private final ProductPageMapper productPageMapper;
-    private final ProductVariantRepository productVariantRepository; // <-- inyectar
+    private final ProductVariantRepository productVariantRepository;
 
     @Override
+    @Transactional
     public ServiceResult<ProductResponse> createProduct(ProductRequest dto) {
         if (dto.getSku() != null && productRepository.existsBySku(dto.getSku())) {
             return ServiceResult.error(HttpStatus.CONFLICT, "Ya existe un producto con ese SKU.");
         }
 
+        // Crear entidad Product (sin stock/price)
         Product entity = productMapper.toEntity(dto);
-        entity.setStockTrackingMode(StockTrackingMode.SIMPLE); // <-- por defecto
-
         Product saved = productRepository.save(entity);
-        ProductResponse response = productMapper.toResponse(saved);
-        // opcional: si querés setear stock efectivo en la respuesta:
-        // response.setStock(saved.getStock());
 
+        // Crear variante por defecto
+        ProductVariant v = new ProductVariant();
+        v.setProduct(saved);
+
+        // SKU → usa el del producto si viene, o genera uno base
+        String baseSku = (dto.getSku() != null ? dto.getSku() : "PROD-" + saved.getId());
+        v.setSku(baseSku + "-DEFAULT");
+
+        v.setPrice(dto.getPrice());   // mover precio del request a la variante
+        v.setStock(0);                // stock inicial en 0 (ajustar después)
+        v.setAttributesJson("{}");    // variante "genérica"
+
+        productVariantRepository.save(v);
+
+        ProductResponse response = productMapper.toResponse(saved);
         return ServiceResult.created(response);
     }
 
@@ -54,18 +64,8 @@ public class ProductServiceImpl implements ProductService {
     public ServiceResult<List<ProductResponse>> getAllProducts() {
         List<ProductResponse> list = productRepository.findAll()
                 .stream()
-                .map(p -> {
-                    ProductResponse r = productMapper.toResponse(p);
-                    // opcional: stock efectivo
-                    // if (p.getStockTrackingMode() == StockTrackingMode.VARIANT) {
-                    //     r.setStock(productVariantRepository.sumStockByProductId(p.getId()));
-                    // } else {
-                    //     r.setStock(p.getStock());
-                    // }
-                    return r;
-                })
+                .map(productMapper::toResponse)
                 .toList();
-
         return ServiceResult.ok(list);
     }
 
@@ -74,14 +74,7 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
 
-        ProductResponse r = productMapper.toResponse(product);
-        // opcional: stock efectivo
-        // if (product.getStockTrackingMode() == StockTrackingMode.VARIANT) {
-        //     r.setStock(productVariantRepository.sumStockByProductId(product.getId()));
-        // } else {
-        //     r.setStock(product.getStock());
-        // }
-        return ServiceResult.ok(r);
+        return ServiceResult.ok(productMapper.toResponse(product));
     }
 
     @Override
@@ -89,13 +82,11 @@ public class ProductServiceImpl implements ProductService {
         Pageable pageable = productPageMapper.toPageable(params);
 
         Page<Product> result = Boolean.TRUE.equals(params.getInStockOnly())
-                ? productRepository.findInStock(pageable)          // 👈 acá
+                ? productRepository.findInStock(pageable)  // usa query con variantes
                 : productRepository.findAll(pageable);
 
         Page<ProductResponse> mapped = result.map(productMapper::toResponse);
         PaginatedResponse<ProductResponse> response = productPageMapper.toPaginatedResponse(mapped, params);
         return ServiceResult.ok(response);
     }
-
-
 }

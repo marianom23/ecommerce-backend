@@ -13,6 +13,9 @@ public class ProductResponse {
     private BigDecimal discountedPrice;
     private ImagesDto imgs;
 
+    private int variantCount;        // 👈 cantidad de variantes
+    private Long defaultVariantId;   // 👈 id de la variante única (si variantCount == 1)
+
     @Data
     public static class ImagesDto {
         private List<String> thumbnails;

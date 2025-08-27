@@ -1,10 +1,7 @@
 package com.empresa.ecommerce_backend.model;
 
-import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -26,7 +23,7 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"discounts", "tags"})
+@ToString(exclude = {"discounts", "tags", "variants"})
 public class Product {
 
     @Id
@@ -41,23 +38,18 @@ public class Product {
     @Column(length = 2000)
     private String description;
 
-    @Column(nullable = false, precision = 15, scale = 2)
-    @NotNull
-    @Min(0)
-    private BigDecimal price;
-
-    @Column(nullable = false)
-    @NotNull
-    @Min(0)
-    private Integer stock = 0;
-
     @Column(length = 100, unique = true)
-    private String sku;
+    private String sku; // opcional: sku “base” o código interno de catálogo
 
+    // ---------- Relaciones ----------
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
     private Set<ProductImage> images = new HashSet<>();
+
+    @OneToMany(mappedBy = "product", fetch = FetchType.LAZY,
+            cascade = CascadeType.ALL, orphanRemoval = true)
+    private Set<ProductVariant> variants = new HashSet<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "brand_id")
@@ -67,23 +59,20 @@ public class Product {
     @JoinColumn(name = "category_id")
     private Category category;
 
-    // ------ NUEVOS CAMPOS ------
+    // ---------- Dimensiones / logística ----------
     @Column(precision = 10, scale = 3)
-    private BigDecimal weight;    // en kilogramos (ajusta si prefieres gramos)
+    private BigDecimal weight;    // en kilogramos
 
     @Column(precision = 10, scale = 2)
-    private BigDecimal length;    // en cm
+    private BigDecimal length;    // cm
 
     @Column(precision = 10, scale = 2)
-    private BigDecimal width;     // en cm
+    private BigDecimal width;     // cm
 
     @Column(precision = 10, scale = 2)
-    private BigDecimal height;    // en cm
+    private BigDecimal height;    // cm
 
-    @Column(nullable = false, length = 20)
-    @Enumerated(EnumType.STRING)
-    private StockTrackingMode stockTrackingMode = StockTrackingMode.SIMPLE;
-
+    // ---------- Marketing ----------
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "product_discount",
@@ -100,3 +89,4 @@ public class Product {
     )
     private Set<Tag> tags = new HashSet<>();
 }
+

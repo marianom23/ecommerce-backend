@@ -4,7 +4,6 @@ package com.empresa.ecommerce_backend.service;
 import com.empresa.ecommerce_backend.dto.request.PurchaseOrderRequest;
 import com.empresa.ecommerce_backend.dto.response.PurchaseOrderResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
-import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.PurchaseLotMapper;
 import com.empresa.ecommerce_backend.mapper.PurchaseOrderMapper;
@@ -14,7 +13,7 @@ import com.empresa.ecommerce_backend.model.PurchaseLot;
 import com.empresa.ecommerce_backend.model.PurchaseOrder;
 import com.empresa.ecommerce_backend.model.Supplier;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
-import com.empresa.ecommerce_backend.repository.ProductVariantRepository; // <-- NUEVO
+import com.empresa.ecommerce_backend.repository.ProductVariantRepository;
 import com.empresa.ecommerce_backend.repository.PurchaseOrderRepository;
 import com.empresa.ecommerce_backend.repository.SupplierRepository;
 import com.empresa.ecommerce_backend.service.interfaces.PurchaseOrderService;
@@ -45,45 +44,39 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         }
 
         Supplier supplier = supplierRepository.findById(dto.getSupplierId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Proveedor no encontrado con ID: " + dto.getSupplierId()));
+                .orElseThrow(() -> new RecursoNoEncontradoException(
+                        "Proveedor no encontrado con ID: " + dto.getSupplierId()));
 
         PurchaseOrder purchaseOrder = purchaseOrderMapper.toEntity(dto);
         purchaseOrder.setSupplier(supplier);
 
         List<PurchaseLot> lotEntities = dto.getLots().stream().map(lotDto -> {
 
-            ProductVariant variant = null;
-            if (lotDto.getProductVariantId() != null) {
-                variant = productVariantRepository.findById(lotDto.getProductVariantId())
-                        .orElseThrow(() -> new RecursoNoEncontradoException(
-                                "Variante no encontrada con ID: " + lotDto.getProductVariantId()));
+            // ----- Modelo variante-only: productVariantId ES OBLIGATORIO -----
+            if (lotDto.getProductVariantId() == null) {
+                throw new IllegalArgumentException(
+                        "Cada lote debe indicar productVariantId (modelo variante-only).");
             }
 
-            Product product;
-            if (variant != null) {
-                product = variant.getProduct();
-                if (lotDto.getProductId() != null && !product.getId().equals(lotDto.getProductId())) {
-                    throw new IllegalArgumentException("productId no coincide con el producto de la variante " + variant.getId());
-                }
-            } else {
-                if (lotDto.getProductId() == null) {
-                    throw new IllegalArgumentException("Debe enviar productId o productVariantId en cada lote.");
-                }
-                product = productRepository.findById(lotDto.getProductId())
-                        .orElseThrow(() -> new RecursoNoEncontradoException(
-                                "Producto no encontrado con ID: " + lotDto.getProductId()));
+            // Traer variante y su producto
+            ProductVariant variant = productVariantRepository.findById(lotDto.getProductVariantId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException(
+                            "Variante no encontrada con ID: " + lotDto.getProductVariantId()));
+
+            Product product = variant.getProduct();
+            if (product == null) {
+                throw new IllegalStateException(
+                        "La variante " + variant.getId() + " no está asociada a ningún producto.");
             }
 
-            // ---- Validación según modo ----
-            if (product.getStockTrackingMode() == StockTrackingMode.VARIANT) {
-                if (variant == null) {
-                    throw new IllegalArgumentException("El producto " + product.getId() + " opera por variantes. Debe indicar productVariantId.");
-                }
-            } else { // SIMPLE
-                if (variant != null) {
-                    throw new IllegalArgumentException("El producto " + product.getId() + " es SIMPLE. No debe indicar productVariantId.");
-                }
+            // Si llega productId, validar consistencia
+            if (lotDto.getProductId() != null && !product.getId().equals(lotDto.getProductId())) {
+                throw new IllegalArgumentException(
+                        "productId (" + lotDto.getProductId() + ") no coincide con el producto de la variante " + variant.getId());
             }
+
+            // (Opcional) Si quieres validar que el productId exista cuando viene, puedes cargarlo:
+            // productRepository.findById(lotDto.getProductId())...
 
             // Mapear lote y setear relaciones
             PurchaseLot lot = purchaseLotMapper.toEntity(lotDto);
@@ -91,14 +84,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             lot.setProduct(product);
             lot.setProductVariant(variant);
 
-            // ---- Stock ----
-            if (variant != null) {
-                // Modo VARIANT (o al menos vino variante): solo variante
-                variant.setStock(variant.getStock() + lot.getQuantity());
-            } else {
-                // Modo SIMPLE: solo producto
-                product.setStock(product.getStock() + lot.getQuantity());
-            }
+            // ----- Ajuste de stock SOLO en la variante -----
+            Integer current = variant.getStock() == null ? 0 : variant.getStock();
+            Integer qty = lot.getQuantity() == null ? 0 : lot.getQuantity();
+            variant.setStock(current + qty);
 
             return lot;
         }).toList();
@@ -110,4 +99,3 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         return ServiceResult.created(response);
     }
 }
-
