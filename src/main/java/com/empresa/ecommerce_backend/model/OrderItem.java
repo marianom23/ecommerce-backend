@@ -12,19 +12,17 @@ import java.math.BigDecimal;
         name = "order_items",
         indexes = {
                 @Index(name = "idx_order_items_order", columnList = "order_id"),
-                @Index(name = "idx_order_items_product", columnList = "product_id")
+                @Index(name = "idx_order_items_variant", columnList = "variant_id")
         },
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_order_product",
-                columnNames = {"order_id", "product_id"}
+                name = "uk_order_variant",
+                columnNames = {"order_id", "variant_id"}
         )
 )
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"order", "product"})
+@ToString(exclude = {"order", "variant"})
 public class OrderItem {
 
     @Id
@@ -37,26 +35,29 @@ public class OrderItem {
     @NotNull
     private Order order;
 
+    // 👉 ahora la relación es con la variante
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "product_id", nullable = false)
+    @JoinColumn(name = "variant_id", nullable = false)
     @NotNull
-    private Product product;
+    private ProductVariant variant;
 
+    // Snapshots útiles para reporting/render:
     @Column(length = 200, nullable = false)
     @NotNull
-    private String productName;
+    private String productName;   // name del Product padre
 
     @Column(length = 100)
-    private String sku;
+    private String sku;           // sku de la variante
+
+    @Column(length = 1000)
+    private String attributesJson; // {"size":"M","color":"Red"}
 
     @Column(nullable = false, precision = 15, scale = 2)
-    @NotNull
-    @Min(0)
-    private BigDecimal unitPrice;
+    @NotNull @Min(0)
+    private BigDecimal unitPrice; // 👉 precio snapshot de la variante
 
     @Column(nullable = false)
-    @NotNull
-    @Min(1)
+    @NotNull @Min(1)
     private Integer quantity;
 
     @Column(precision = 15, scale = 2)
@@ -64,12 +65,10 @@ public class OrderItem {
     private BigDecimal discountAmount;
 
     @Column(nullable = false, precision = 15, scale = 2)
-    @NotNull
-    @Min(0)
+    @NotNull @Min(0)
     private BigDecimal lineTotal;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "purchase_lot_id")
-    private PurchaseLot purchaseLot; // Lote desde el cual se vendió este producto
-
+    private PurchaseLot purchaseLot; // si usás lotes de compra
 }

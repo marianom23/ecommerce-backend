@@ -3,9 +3,7 @@ package com.empresa.ecommerce_backend.service;
 import com.empresa.ecommerce_backend.dto.request.ProductVariantRequest;
 import com.empresa.ecommerce_backend.dto.response.ProductVariantResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
-import com.empresa.ecommerce_backend.enums.StockTrackingMode;
 import com.empresa.ecommerce_backend.mapper.ProductVariantMapper;
-import com.empresa.ecommerce_backend.model.ProductVariant;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
 import com.empresa.ecommerce_backend.repository.ProductVariantRepository;
 import com.empresa.ecommerce_backend.service.interfaces.ProductVariantService;
@@ -14,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
 import java.util.List;
 
 @Service
@@ -45,6 +42,11 @@ public class ProductVariantServiceImpl implements ProductVariantService {
     @Override
     @Transactional
     public ServiceResult<ProductVariantResponse> create(Long productId, ProductVariantRequest req) {
+        // si usas req.productId, validar:
+        if (req.getProductId() != null && !req.getProductId().equals(productId)) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "productId del cuerpo no coincide con la URL.");
+        }
+
         var product = productRepository.findById(productId)
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado"));
 
@@ -52,17 +54,12 @@ public class ProductVariantServiceImpl implements ProductVariantService {
             return ServiceResult.error(HttpStatus.CONFLICT, "SKU de variante ya existe.");
         }
 
-        var v = new ProductVariant();
+        var v = mapper.toEntity(req);
         v.setProduct(product);
-        v.setSku(req.getSku());
-        v.setPrice(req.getPrice());
-        v.setAttributesJson(req.getAttributesJson());
-        v.setStock(0);
 
         var saved = variantRepository.save(v);
         return ServiceResult.created(mapper.toResponse(saved));
     }
-
 
     @Override
     @Transactional
@@ -93,9 +90,8 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         }
 
         variantRepository.delete(variant);
-        return ServiceResult.ok(null);
+        return ServiceResult.noContent();
     }
-
 
     private void ensureProductExists(Long productId) {
         if (!productRepository.existsById(productId)) {

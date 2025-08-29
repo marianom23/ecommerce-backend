@@ -26,20 +26,21 @@ public interface ProductDetailsMapper {
     @Mapping(target = "category", expression = "java(product.getCategory() != null ? product.getCategory().getName() : null)")
     @Mapping(target = "tags",     expression = "java(mapTags(product.getTags()))")
     @Mapping(target = "discounts",expression = "java(mapDiscounts(product.getDiscounts()))")
-    // medidas
-    @Mapping(target = "weight", source = "product.weight")
-    @Mapping(target = "length", source = "product.length")
-    @Mapping(target = "width",  source = "product.width")
-    @Mapping(target = "height", source = "product.height")
-    @Mapping(target = "sku",    source = "product.sku")
+    @Mapping(target = "sku",      source = "product.sku")
     @Mapping(target = "description", source = "product.description")
     // variantes
     @Mapping(target = "hasVariants",       expression = "java(variants != null && !variants.isEmpty())")
     @Mapping(target = "variantAttributes", expression = "java(buildVariantAttributes(variants))")
     @Mapping(target = "variantOptions",    expression = "java(buildVariantOptions(variants))")
     @Mapping(target = "variants",          expression = "java(mapVariants(product, variants))")
-    // stock: suma de stocks de variantes (Product ya no tiene stock)
+    // stock total (suma de variantes)
     @Mapping(target = "stock",             expression = "java(totalVariantStock(variants))")
+
+    // 🔁 Medidas representativas desde la variante (si tu DTO las necesita)
+    @Mapping(target = "weight", expression = "java(representativeWeightKg(variants))")
+    @Mapping(target = "length", expression = "java(representativeLengthCm(variants))")
+    @Mapping(target = "width",  expression = "java(representativeWidthCm(variants))")
+    @Mapping(target = "height", expression = "java(representativeHeightCm(variants))")
     ProductDetailsResponse toDetails(Product product, java.util.List<ProductVariant> variants);
 
     // ---------- Precio representativo (mínimo entre variantes) ----------
@@ -61,22 +62,20 @@ public interface ProductDetailsMapper {
 
     // ---------- Stock total (suma de variantes) ----------
     default Integer totalVariantStock(List<ProductVariant> variants) {
-        if (variants == null || variants.isEmpty()) return null; // o 0 si lo preferís
+        if (variants == null || variants.isEmpty()) return null; // o 0 si preferís
         long sum = variants.stream()
                 .map(ProductVariant::getStock)
                 .filter(Objects::nonNull)
                 .mapToLong(Integer::longValue)
                 .sum();
-        // evita overflow al castear
         return (sum > Integer.MAX_VALUE) ? Integer.MAX_VALUE : (int) sum;
     }
 
-    // ---------- Imágenes ----------
+    // ---------- Imágenes del producto ----------
     default ProductDetailsResponse.ImagesDto buildProductImages(Product p) {
         List<String> all = (p != null && p.getImages() != null)
                 ? p.getImages().stream()
                 .filter(Objects::nonNull)
-                .filter(pi -> pi.getVariant() == null)
                 .sorted(Comparator.comparing(ProductImage::getPosition, Comparator.nullsLast(Integer::compareTo)))
                 .map(ProductImage::getUrl)
                 .filter(Objects::nonNull)
@@ -89,6 +88,7 @@ public interface ProductDetailsMapper {
         return imgs;
     }
 
+    // ---------- Imágenes de variante (si tu VariantDto las muestra) ----------
     default ProductDetailsResponse.ImagesDto buildVariantImages(ProductVariant v) {
         List<String> all = (v != null && v.getImages() != null)
                 ? v.getImages().stream()
@@ -153,6 +153,8 @@ public interface ProductDetailsMapper {
                     dto.setStock(v.getStock());
                     dto.setAttributes(parseAttributesJson(v));
                     dto.setImgs(buildVariantImages(v));
+                    // (opcional) si tu VariantDto tiene medidas:
+                    // dto.setWeightKg(v.getWeightKg()); dto.setLengthCm(v.getLengthCm()); ...
                     return dto;
                 })
                 .toList();
@@ -238,5 +240,35 @@ public interface ProductDetailsMapper {
         } catch (Exception e) {
             return Map.of();
         }
+    }
+
+    // ---------- Representante logístico (para weight/length/width/height a nivel producto) ----------
+    default ProductVariant representativeVariantForLogistics(List<ProductVariant> variants) {
+        if (variants == null || variants.isEmpty()) return null;
+
+        // elegimos la variante de MENOR volumen como “representativa” (cambia si querés)
+        return variants.stream()
+                .filter(v -> v.getLengthCm() != null && v.getWidthCm() != null && v.getHeightCm() != null)
+                .min(Comparator.comparing(v -> v.getLengthCm()
+                        .multiply(v.getWidthCm())
+                        .multiply(v.getHeightCm())))
+                .orElse(variants.get(0)); // fallback: la primera
+    }
+
+    default BigDecimal representativeWeightKg(List<ProductVariant> variants) {
+        ProductVariant v = representativeVariantForLogistics(variants);
+        return v != null ? v.getWeightKg() : null;
+    }
+    default BigDecimal representativeLengthCm(List<ProductVariant> variants) {
+        ProductVariant v = representativeVariantForLogistics(variants);
+        return v != null ? v.getLengthCm() : null;
+    }
+    default BigDecimal representativeWidthCm(List<ProductVariant> variants) {
+        ProductVariant v = representativeVariantForLogistics(variants);
+        return v != null ? v.getWidthCm() : null;
+    }
+    default BigDecimal representativeHeightCm(List<ProductVariant> variants) {
+        ProductVariant v = representativeVariantForLogistics(variants);
+        return v != null ? v.getHeightCm() : null;
     }
 }

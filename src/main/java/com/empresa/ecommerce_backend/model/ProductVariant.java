@@ -17,12 +17,10 @@ import java.util.Set;
                 @Index(name = "idx_variants_sku", columnList = "sku", unique = true)
         }
 )
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = "product")
+@ToString(exclude = {"product", "images"})
 public class ProductVariant {
 
     @Id
@@ -34,24 +32,39 @@ public class ProductVariant {
     @JoinColumn(name = "product_id", nullable = false)
     private Product product;
 
+    // Imágenes específicas de la variante (si las usás)
     @OneToMany(mappedBy = "variant", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
     private Set<ProductImage> images = new HashSet<>();
 
-    @Column(length = 100, unique = true)
+    // Identificación vendible
+    @Column(length = 100, unique = true, nullable = false)
     private String sku;
 
+    // Precio y stock
     @Column(precision = 15, scale = 2, nullable = false)
     @NotNull
-    @Min(0)
     private BigDecimal price;
 
     @Column(nullable = false)
-    @NotNull
-    @Min(0)
+    @NotNull @Min(0)
     private Integer stock = 0;
 
+    // Logística (por variante)
+    @Column(precision = 10, scale = 3, nullable = false)
+    private BigDecimal weightKg;   // kg
+
+    @Column(precision = 10, scale = 2, nullable = false)
+    private BigDecimal lengthCm;   // cm
+
+    @Column(precision = 10, scale = 2, nullable = false)
+    private BigDecimal widthCm;    // cm
+
+    @Column(precision = 10, scale = 2, nullable = false)
+    private BigDecimal heightCm;   // cm
+
+    // Atributos (talle/color/etc.) si no los modelás en tablas
     @Column(length = 1000)
     private String attributesJson; // {"size":"M","color":"Red"}
 }

@@ -35,26 +35,11 @@ public class ProductServiceImpl implements ProductService {
     @Transactional
     public ServiceResult<ProductResponse> createProduct(ProductRequest dto) {
         if (dto.getSku() != null && productRepository.existsBySku(dto.getSku())) {
-            return ServiceResult.error(HttpStatus.CONFLICT, "Ya existe un producto con ese SKU.");
+            return ServiceResult.error(HttpStatus.CONFLICT, "Ya existe un producto con ese SKU base.");
         }
 
-        // Crear entidad Product (sin stock/price)
         Product entity = productMapper.toEntity(dto);
         Product saved = productRepository.save(entity);
-
-        // Crear variante por defecto
-        ProductVariant v = new ProductVariant();
-        v.setProduct(saved);
-
-        // SKU → usa el del producto si viene, o genera uno base
-        String baseSku = (dto.getSku() != null ? dto.getSku() : "PROD-" + saved.getId());
-        v.setSku(baseSku + "-DEFAULT");
-
-        v.setPrice(dto.getPrice());   // mover precio del request a la variante
-        v.setStock(0);                // stock inicial en 0 (ajustar después)
-        v.setAttributesJson("{}");    // variante "genérica"
-
-        productVariantRepository.save(v);
 
         ProductResponse response = productMapper.toResponse(saved);
         return ServiceResult.created(response);

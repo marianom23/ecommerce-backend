@@ -15,7 +15,10 @@ public interface OrderItemRepository extends BaseRepository<OrderItem, Long> {
     @EntityGraph(attributePaths = {"product"})
     List<OrderItem> findWithProductByOrder_Id(Long orderId);
 
-    Optional<OrderItem> findByOrder_IdAndProduct_Id(Long orderId, Long productId);
+    // ✔️ Opción 1: order + variant (coincide con tu unique constraint uk_order_variant)
+    Optional<OrderItem> findByOrderIdAndVariantId(Long orderId, Long variantId);
+
+    long deleteByOrderIdAndVariantId(Long orderId, Long variantId);
 
     long deleteByOrder_Id(Long orderId);
 }

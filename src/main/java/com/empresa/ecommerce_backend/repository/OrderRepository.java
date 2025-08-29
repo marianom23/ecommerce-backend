@@ -18,6 +18,10 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
 
     List<Order> findByUser_IdOrderByOrderDateDesc(Long userId);
 
+    Optional<Order> findByIdAndUserId(Long id, Long userId);
+
+    List<Order> findAllByUserIdOrderByCreatedAtDesc(Long userId);
+
     List<Order> findByStatus(OrderStatus status);
 
     List<Order> findByOrderDateBetween(LocalDateTime from, LocalDateTime to);

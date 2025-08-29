@@ -34,7 +34,7 @@ public class DataSeeder {
         seedBrands();
         seedCategories();
         seedSuppliers();
-        seedProductsAndVariants(); // 👈 ahora crea productos + variantes
+        seedProductsAndVariants(); // crea productos + variantes (con logística en variant)
     }
 
     private void seedRoles() {
@@ -47,7 +47,6 @@ public class DataSeeder {
 
     private void seedAdmin() {
         String adminEmail = "admin@admin.com";
-
         if (userRepository.findByEmail(adminEmail).isEmpty()) {
             Role adminRole = roleRepository.findByName(RoleName.ADMIN)
                     .orElseThrow(() -> new RuntimeException("ADMIN role not found."));
@@ -112,14 +111,13 @@ public class DataSeeder {
     }
 
     /**
-     * Crea 50 productos SIN price/stock y genera variantes:
-     * - Siempre crea una variante DEFAULT con price y stock.
-     * - Para la mitad de los productos, agrega una 2da variante para probar el modal del front.
+     * Crea 50 productos (solo catálogo) y genera variantes:
+     * - Variante DEFAULT con price/stock y logística.
+     * - Para la mitad de los productos agrega una 2da variante (ALT) para pruebas.
      */
     private void seedProductsAndVariants() {
         if (productRepository.count() > 0) return;
 
-        // categ/brand de ejemplo (ajustá si querés algo más aleatorio)
         Category defaultCategory = categoryRepository.findById(1L).orElseThrow();
         Brand defaultBrand = brandRepository.findById(1L).orElseThrow();
 
@@ -127,47 +125,48 @@ public class DataSeeder {
             Product product = new Product();
             product.setName("Producto de prueba " + i);
             product.setDescription("Descripción del producto " + i);
-            product.setSku("SKU-" + String.format("%03d", i));
-
-            // medidas/logística (BigDecimal en entidad)
-            product.setWeight(BigDecimal.valueOf(1.25));
-            product.setLength(BigDecimal.valueOf(25.0));
-            product.setWidth(BigDecimal.valueOf(15.0));
-            product.setHeight(BigDecimal.valueOf(10.0));
-
+            product.setSku("SKU-" + String.format("%03d", i)); // SKU base opcional
             product.setCategory(defaultCategory);
             product.setBrand(defaultBrand);
 
-            // Imagen general del producto (variant == null)
+            // Imagen general del producto
             ProductImage img = new ProductImage();
             img.setProduct(product);
             img.setUrl("https://picsum.photos/seed/product-" + i + "/1200/800");
             img.setAltText("Imagen del producto " + i);
             img.setPosition(1);
-
-            // Asegurate que Product.images tenga cascade PERSIST o inicialización
             product.getImages().add(img);
 
-            // Guarda el producto primero
+            // Guarda el producto primero (cascade para imágenes)
             Product savedProduct = productRepository.save(product);
 
-            // Variante por defecto
+            // ---------- Variante por defecto ----------
             ProductVariant v1 = new ProductVariant();
             v1.setProduct(savedProduct);
             v1.setSku(savedProduct.getSku() + "-DEFAULT");
-            v1.setPrice(BigDecimal.valueOf(100.0 + i)); // precio base de ejemplo
-            v1.setStock((i % 3 == 0) ? 0 : 10);         // algunos sin stock para probar filtros
+            v1.setPrice(BigDecimal.valueOf(100.0 + i));           // precio demo
+            v1.setStock((i % 3 == 0) ? 0 : 10);                   // algunos sin stock
             v1.setAttributesJson("{}");
+            // logística en la VARIANTE
+            v1.setWeightKg(BigDecimal.valueOf(1.25));
+            v1.setLengthCm(BigDecimal.valueOf(25.0));
+            v1.setWidthCm(BigDecimal.valueOf(15.0));
+            v1.setHeightCm(BigDecimal.valueOf(10.0));
             productVariantRepository.save(v1);
 
-            // Para la mitad de los productos, agregamos una segunda variante
+            // ---------- Segunda variante (para la mitad) ----------
             if (i % 2 == 0) {
                 ProductVariant v2 = new ProductVariant();
                 v2.setProduct(savedProduct);
                 v2.setSku(savedProduct.getSku() + "-ALT");
-                v2.setPrice(BigDecimal.valueOf(110.0 + i)); // un poco más cara
+                v2.setPrice(BigDecimal.valueOf(110.0 + i));
                 v2.setStock(5);
                 v2.setAttributesJson("{\"color\":\"Rojo\",\"talle\":\"M\"}");
+                // logística distinta para probar
+                v2.setWeightKg(BigDecimal.valueOf(1.40));
+                v2.setLengthCm(BigDecimal.valueOf(27.0));
+                v2.setWidthCm(BigDecimal.valueOf(17.0));
+                v2.setHeightCm(BigDecimal.valueOf(12.0));
                 productVariantRepository.save(v2);
             }
         }

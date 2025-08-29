@@ -1,9 +1,7 @@
 package com.empresa.ecommerce_backend.dto.request;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
-
-import java.math.BigDecimal;
 
 @Data
 public class ProductRequest {
@@ -13,29 +11,12 @@ public class ProductRequest {
 
     private String description;
 
-    @NotNull
-    @Min(0)
-    private BigDecimal price;
-
+    // SKU base opcional (no es el SKU vendible)
     private String sku;
 
+    // Opcional: si cargás una imagen “hero” del producto
     private String imageUrl;
 
     private Long brandId;
-
     private Long categoryId;
-
-    // Nuevo: Peso del producto en kilogramos (ajusta según la unidad que manejes)
-    @DecimalMin(value = "0.0", inclusive = false, message = "El peso debe ser mayor a 0")
-    private BigDecimal weight;
-
-    // Nuevos: Dimensiones (en cm, por ejemplo)
-    @DecimalMin(value = "0.0", inclusive = false, message = "El largo debe ser mayor a 0")
-    private BigDecimal length;
-
-    @DecimalMin(value = "0.0", inclusive = false, message = "El ancho debe ser mayor a 0")
-    private BigDecimal width;
-
-    @DecimalMin(value = "0.0", inclusive = false, message = "La altura debe ser mayor a 0")
-    private BigDecimal height;
 }

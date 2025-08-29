@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 
-import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -13,17 +12,14 @@ import java.util.Set;
         name = "products",
         indexes = {
                 @Index(name = "idx_products_name", columnList = "name"),
-                @Index(name = "idx_products_sku", columnList = "sku", unique = true),
                 @Index(name = "idx_products_category", columnList = "category_id"),
                 @Index(name = "idx_products_brand", columnList = "brand_id")
         }
 )
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter
+@NoArgsConstructor @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"discounts", "tags", "variants"})
+@ToString(exclude = {"discounts", "tags", "variants", "images"})
 public class Product {
 
     @Id
@@ -38,10 +34,11 @@ public class Product {
     @Column(length = 2000)
     private String description;
 
-    @Column(length = 100, unique = true)
-    private String sku; // opcional: sku “base” o código interno de catálogo
+    // SKU BASE (opcional, ya no único, el SKU vendible está en la variante)
+    @Column(length = 100)
+    private String sku;
 
-    // ---------- Relaciones ----------
+    // Relaciones
     @OneToMany(mappedBy = "product", fetch = FetchType.LAZY,
             cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
@@ -59,20 +56,7 @@ public class Product {
     @JoinColumn(name = "category_id")
     private Category category;
 
-    // ---------- Dimensiones / logística ----------
-    @Column(precision = 10, scale = 3)
-    private BigDecimal weight;    // en kilogramos
-
-    @Column(precision = 10, scale = 2)
-    private BigDecimal length;    // cm
-
-    @Column(precision = 10, scale = 2)
-    private BigDecimal width;     // cm
-
-    @Column(precision = 10, scale = 2)
-    private BigDecimal height;    // cm
-
-    // ---------- Marketing ----------
+    // Marketing
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "product_discount",
@@ -89,4 +73,3 @@ public class Product {
     )
     private Set<Tag> tags = new HashSet<>();
 }
-
