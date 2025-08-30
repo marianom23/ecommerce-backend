@@ -22,16 +22,14 @@ public class CreateOrderRequest {
     @NotNull
     private Long billingProfileId;
 
-    @Valid
-    @Size(min = 1)
-    @NotNull
-    private List<OrderItemRequest> items;
-
     // Opcionales
     private String couponCode;
     private String orderNote;
 
-    // 🔑 Nuevo: método de pago elegido en el checkout
+    // Identidad del carrito
+    private String sessionId;      // para guest (si no hay user)
+    private Integer cartVersion;   // optimista (opcional)
+
     @NotNull
     private PaymentMethod paymentMethod;
 }

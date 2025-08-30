@@ -11,9 +11,7 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
 @Table(
@@ -75,7 +73,7 @@ public class Order {
 
     // Ítems
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    private Set<OrderItem> items = new HashSet<>();
+    private List<OrderItem> items = new ArrayList<>();
 
     // Snapshots
     @Embedded
@@ -118,6 +116,9 @@ public class Order {
     @Enumerated(EnumType.STRING)
     @Column(name = "chosen_payment_method", length = 30)
     private PaymentMethod chosenPaymentMethod;
+
+    @Column(name = "coupon_code", length = 50)
+    private String couponCode;
 
     // Envíos
     @OneToMany(mappedBy = "order", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = false)

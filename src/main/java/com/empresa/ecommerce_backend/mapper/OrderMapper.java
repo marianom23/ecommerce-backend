@@ -68,7 +68,8 @@ public interface OrderMapper {
         return dto;
     }
 
-    default List<OrderItemResponse> toItemResponses(java.util.Set<OrderItem> items) {
+    default List<OrderItemResponse> toItemResponses(java.util.List<OrderItem> items) {
         return items.stream().map(this::toItemResponse).toList();
     }
+
 }

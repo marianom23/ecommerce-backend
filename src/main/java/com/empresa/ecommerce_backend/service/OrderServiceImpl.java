@@ -31,6 +31,10 @@ public class OrderServiceImpl implements OrderService {
     private final BillingProfileRepository billingRepo;
     private final OrderRepository orderRepo;
     private final ProductVariantRepository variantRepo;
+
+    // 👇 inyectamos carrito
+    private final CartRepository cartRepo;
+
     private final OrderMapper orderMapper;
 
     private Long currentUserId() {
@@ -46,10 +50,13 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public ServiceResult<OrderResponse> createOrder(CreateOrderRequest req) {
-        Long uid = currentUserId();
-        User user = userRepo.findById(uid)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
+        Long uid = null;
+        try { uid = currentUserId(); } catch (Exception ignored) {}
 
+        // 1) Usuario (si hay)
+        User user = (uid != null) ? userRepo.findById(uid).orElse(null) : null;
+
+        // 2) Direcciones / facturación
         Address shipAddr = addressRepo.findById(req.getShippingAddressId())
                 .orElseThrow(() -> new RecursoNoEncontradoException("Dirección de envío no encontrada"));
 
@@ -61,11 +68,20 @@ public class OrderServiceImpl implements OrderService {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "El perfil de facturación no tiene dirección asociada");
         }
 
-        // Snapshots
+        // 3) Resolver carrito (usuario o sesión)
+        Cart cart = null;
+        if (user != null) cart = cartRepo.findByUserId(user.getId()).orElse(null);
+        if (cart == null && req.getSessionId() != null && !req.getSessionId().isBlank()) {
+            cart = cartRepo.findBySessionId(req.getSessionId()).orElse(null);
+        }
+        if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Tu carrito está vacío.");
+        }
+
+        // 4) Crear orden + snapshots
         var shippingSnapshot = SnapshotMapper.toSnapshot(shipAddr);
         var billingSnapshot  = SnapshotMapper.toSnapshot(bp, billingAddr);
 
-        // Crear Order
         Order order = new Order();
         order.setUser(user);
         order.setOrderDate(LocalDateTime.now());
@@ -73,27 +89,28 @@ public class OrderServiceImpl implements OrderService {
         order.setShippingAddress(shippingSnapshot);
         order.setBillingInfo(billingSnapshot);
         order.setChosenPaymentMethod(req.getPaymentMethod());
+        // ⚠️ Dejamos llegar couponCode pero no lo usamos por ahora.
+        // order.setCouponCode(null); // si tenés la columna y querés dejarla vacía
 
         BigDecimal subTotal = BigDecimal.ZERO;
-        BigDecimal shippingCost = calcularEnvio(shipAddr); // reemplazar con cotización real
+        BigDecimal shippingCost = calcularEnvio(shipAddr); // TODO: integrar cotización real
         BigDecimal taxAmount = BigDecimal.ZERO;
-        BigDecimal discountTotal = BigDecimal.ZERO;
 
-        // Ítems
-        for (var it : req.getItems()) {
-            // Si tenés método de lock en el repo, úsalo; si no, findById
-            ProductVariant v = variantRepo.findById(it.getVariantId())
-                    .orElseThrow(() -> new RecursoNoEncontradoException("Variante no encontrada: " + it.getVariantId()));
-
-            if (v.getStock() < it.getQuantity()) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST, "Stock insuficiente para SKU " + v.getSku());
+        // 5) Ítems desde carrito (revalidar stock/precio)
+        for (CartItem ci : cart.getItems()) {
+            ProductVariant v = ci.getVariant();
+            if (v == null) {
+                return ServiceResult.error(HttpStatus.BAD_REQUEST, "Ítem inválido en el carrito (falta variante).");
+            }
+            int stock = v.getStock() == null ? 0 : v.getStock();
+            int qty = ci.getQuantity();
+            if (qty <= 0) continue;
+            if (qty > stock) {
+                return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente para SKU " + v.getSku());
             }
 
-            // Reservar stock (simplificado)
-            v.setStock(v.getStock() - it.getQuantity());
-
-            BigDecimal unitPrice = v.getPrice();
-            BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(it.getQuantity()));
+            BigDecimal unitPrice = v.getPrice(); // repricing actual
+            BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(qty));
 
             OrderItem oi = new OrderItem();
             oi.setOrder(order);
@@ -102,16 +119,23 @@ public class OrderServiceImpl implements OrderService {
             oi.setSku(v.getSku());
             oi.setAttributesJson(v.getAttributesJson());
             oi.setUnitPrice(unitPrice);
-            oi.setQuantity(it.getQuantity());
-            oi.setDiscountAmount(BigDecimal.ZERO);
+            oi.setQuantity(qty);
+            oi.setDiscountAmount(BigDecimal.ZERO); // sin descuentos por ítem por ahora
             oi.setLineTotal(lineTotal);
+
+            // Reservar stock (simple)
+            v.setStock(stock - qty);
 
             order.getItems().add(oi);
             subTotal = subTotal.add(lineTotal);
         }
 
-        taxAmount = calcularImpuestos(subTotal);
-        BigDecimal total = subTotal.add(shippingCost).add(taxAmount).subtract(discountTotal);
+        // 6) Descuentos/Impuestos/Total (sin cupón)
+        BigDecimal discountTotal = BigDecimal.ZERO; // 👈 ignoramos couponCode por ahora
+        taxAmount = calcularImpuestos(subTotal);    // si corresponde, sobre bruto
+
+        BigDecimal total = subTotal.subtract(discountTotal).add(shippingCost).add(taxAmount);
+        if (total.compareTo(BigDecimal.ZERO) < 0) total = BigDecimal.ZERO;
 
         order.setSubTotal(subTotal);
         order.setShippingCost(shippingCost);
@@ -120,9 +144,9 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(total);
 
         Order saved = orderRepo.save(order);
-        OrderResponse resp = orderMapper.toResponse(saved);
-        return ServiceResult.created(resp);
+        return ServiceResult.created(orderMapper.toResponse(saved));
     }
+
 
 
     @Override
