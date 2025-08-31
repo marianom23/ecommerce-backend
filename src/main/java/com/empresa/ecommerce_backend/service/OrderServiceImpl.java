@@ -1,15 +1,19 @@
 // src/main/java/com/empresa/ecommerce_backend/service/OrderServiceImpl.java
 package com.empresa.ecommerce_backend.service;
 
-import com.empresa.ecommerce_backend.dto.request.CreateOrderRequest;
+import com.empresa.ecommerce_backend.dto.request.ConfirmOrderRequest;
+import com.empresa.ecommerce_backend.dto.request.UpdateBillingProfileRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdatePaymentMethodRequest;
+import com.empresa.ecommerce_backend.dto.request.UpdateShippingAddressRequest;
 import com.empresa.ecommerce_backend.dto.response.OrderResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.enums.OrderStatus;
+import com.empresa.ecommerce_backend.enums.PaymentStatus;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.OrderMapper;
 import com.empresa.ecommerce_backend.mapper.SnapshotMapper;
 import com.empresa.ecommerce_backend.model.*;
+import com.empresa.ecommerce_backend.model.embeddable.BillingSnapshot;
 import com.empresa.ecommerce_backend.repository.*;
 import com.empresa.ecommerce_backend.service.interfaces.OrderService;
 import lombok.RequiredArgsConstructor;
@@ -31,10 +35,8 @@ public class OrderServiceImpl implements OrderService {
     private final BillingProfileRepository billingRepo;
     private final OrderRepository orderRepo;
     private final ProductVariantRepository variantRepo;
-
-    // 👇 inyectamos carrito
     private final CartRepository cartRepo;
-
+    private final PaymentRepository paymentRepo;
     private final OrderMapper orderMapper;
 
     private Long currentUserId() {
@@ -47,69 +49,45 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
+    // ====== Crear SIN body, solo logged-in ======
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> createOrder(CreateOrderRequest req) {
-        Long uid = null;
-        try { uid = currentUserId(); } catch (Exception ignored) {}
+    public ServiceResult<OrderResponse> createOrder() {
+        Long uid = currentUserId();
+        User user = userRepo.findById(uid)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
 
-        // 1) Usuario (si hay)
-        User user = (uid != null) ? userRepo.findById(uid).orElse(null) : null;
-
-        // 2) Direcciones / facturación
-        Address shipAddr = addressRepo.findById(req.getShippingAddressId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Dirección de envío no encontrada"));
-
-        BillingProfile bp = billingRepo.findById(req.getBillingProfileId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Perfil de facturación no encontrado"));
-
-        Address billingAddr = bp.getBillingAddress();
-        if (billingAddr == null) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "El perfil de facturación no tiene dirección asociada");
-        }
-
-        // 3) Resolver carrito (usuario o sesión)
-        Cart cart = null;
-        if (user != null) cart = cartRepo.findByUserId(user.getId()).orElse(null);
-        if (cart == null && req.getSessionId() != null && !req.getSessionId().isBlank()) {
-            cart = cartRepo.findBySessionId(req.getSessionId()).orElse(null);
-        }
+        // Carrito del user
+        Cart cart = cartRepo.findByUserId(user.getId()).orElse(null);
         if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Tu carrito está vacío.");
         }
-
-        // 4) Crear orden + snapshots
-        var shippingSnapshot = SnapshotMapper.toSnapshot(shipAddr);
-        var billingSnapshot  = SnapshotMapper.toSnapshot(bp, billingAddr);
 
         Order order = new Order();
         order.setUser(user);
         order.setOrderDate(LocalDateTime.now());
         order.setStatus(OrderStatus.PENDING);
-        order.setShippingAddress(shippingSnapshot);
-        order.setBillingInfo(billingSnapshot);
-        order.setChosenPaymentMethod(req.getPaymentMethod());
-        // ⚠️ Dejamos llegar couponCode pero no lo usamos por ahora.
-        // order.setCouponCode(null); // si tenés la columna y querés dejarla vacía
 
+        // snapshots arrancan null; se llenan con los PATCH
+        order.setShippingAddress(null);
+        order.setBillingInfo(null);
+
+        // Ítems + reserva de stock + subTotal
         BigDecimal subTotal = BigDecimal.ZERO;
-        BigDecimal shippingCost = calcularEnvio(shipAddr); // TODO: integrar cotización real
-        BigDecimal taxAmount = BigDecimal.ZERO;
-
-        // 5) Ítems desde carrito (revalidar stock/precio)
         for (CartItem ci : cart.getItems()) {
+            if (ci.getQuantity() == null || ci.getQuantity() <= 0) continue;
+
             ProductVariant v = ci.getVariant();
             if (v == null) {
                 return ServiceResult.error(HttpStatus.BAD_REQUEST, "Ítem inválido en el carrito (falta variante).");
             }
             int stock = v.getStock() == null ? 0 : v.getStock();
             int qty = ci.getQuantity();
-            if (qty <= 0) continue;
             if (qty > stock) {
                 return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente para SKU " + v.getSku());
             }
 
-            BigDecimal unitPrice = v.getPrice(); // repricing actual
+            BigDecimal unitPrice = v.getPrice();
             BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(qty));
 
             OrderItem oi = new OrderItem();
@@ -120,34 +98,26 @@ public class OrderServiceImpl implements OrderService {
             oi.setAttributesJson(v.getAttributesJson());
             oi.setUnitPrice(unitPrice);
             oi.setQuantity(qty);
-            oi.setDiscountAmount(BigDecimal.ZERO); // sin descuentos por ítem por ahora
+            oi.setDiscountAmount(BigDecimal.ZERO);
             oi.setLineTotal(lineTotal);
 
-            // Reservar stock (simple)
+            // reservar stock
             v.setStock(stock - qty);
 
             order.getItems().add(oi);
             subTotal = subTotal.add(lineTotal);
         }
 
-        // 6) Descuentos/Impuestos/Total (sin cupón)
-        BigDecimal discountTotal = BigDecimal.ZERO; // 👈 ignoramos couponCode por ahora
-        taxAmount = calcularImpuestos(subTotal);    // si corresponde, sobre bruto
-
-        BigDecimal total = subTotal.subtract(discountTotal).add(shippingCost).add(taxAmount);
-        if (total.compareTo(BigDecimal.ZERO) < 0) total = BigDecimal.ZERO;
-
+        // Montos iniciales (envío y tax en 0 hasta que haya datos)
         order.setSubTotal(subTotal);
-        order.setShippingCost(shippingCost);
-        order.setTaxAmount(taxAmount);
-        order.setDiscountTotal(discountTotal);
-        order.setTotalAmount(total);
+        order.setShippingCost(BigDecimal.ZERO);
+        order.setTaxAmount(BigDecimal.ZERO);
+        order.setDiscountTotal(BigDecimal.ZERO);
+        order.setTotalAmount(subTotal); // subtotal + 0 + 0 - 0
 
         Order saved = orderRepo.save(order);
         return ServiceResult.created(orderMapper.toResponse(saved));
     }
-
-
 
     @Override
     @Transactional(readOnly = true)
@@ -158,7 +128,6 @@ public class OrderServiceImpl implements OrderService {
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
 
-    // ===== NUEVO: GET /api/orders (listar mías) =====
     @Override
     @Transactional(readOnly = true)
     public ServiceResult<List<OrderResponse>> listMine() {
@@ -169,43 +138,190 @@ public class OrderServiceImpl implements OrderService {
         return ServiceResult.ok(list);
     }
 
-    // ===== NUEVO: PATCH /api/orders/{id}/payment-method =====
+    // ====== PATCH Shipping ======
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> patchPaymentMethod(Long orderId, UpdatePaymentMethodRequest req) {
+    public ServiceResult<OrderResponse> patchShippingAddress(Long orderId, UpdateShippingAddressRequest req) {
         Long uid = currentUserId();
-        Order o = orderRepo.findById(orderId)
+        Order o = orderRepo.findByIdAndUserId(orderId, uid)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
 
-        if (!isOwner(o, uid)) {
-            return ServiceResult.error(HttpStatus.FORBIDDEN, "No puede modificar esta orden.");
+        if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "La orden ya tiene un pago iniciado. No se puede modificar.");
         }
-        if (o.getStatus() != OrderStatus.PENDING) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede cambiar el método de pago mientras la orden está PENDING.");
-        }
-        // si ya existe un Payment en proceso/confirmado, podrías bloquear aquí:
-        // if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) { ... }
 
-        o.setChosenPaymentMethod(req.getPaymentMethod());
+        if (o.getStatus() != OrderStatus.PENDING) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede modificar shipping mientras la orden está PENDING.");
+        }
+
+        Address shipAddr = addressRepo.findById(req.getShippingAddressId())
+                .orElseThrow(() -> new RecursoNoEncontradoException("Dirección de envío no encontrada"));
+
+        var snapshot = SnapshotMapper.toSnapshot(shipAddr);
+        // completar opcionales si los mandan
+        if (req.getRecipientName() != null) snapshot.setRecipientName(req.getRecipientName());
+        if (req.getPhone() != null) snapshot.setPhone(req.getPhone());
+
+        o.setShippingAddress(snapshot);
+
+        // Recalcular costos (envío y eventualmente impuestos)
+        recalcTotals(o);
 
         Order saved = orderRepo.save(o);
         return ServiceResult.ok(orderMapper.toResponse(saved));
     }
 
-    private boolean isOwner(Order order, Long userId) {
-        return order.getUser() != null
-                && order.getUser().getId() != null
-                && order.getUser().getId().equals(userId);
+    @Override
+    @Transactional
+    public ServiceResult<OrderResponse> confirmOrder(Long orderId, ConfirmOrderRequest req) {
+        Long uid = currentUserId();
+        Order o = orderRepo.findByIdAndUserId(orderId, uid)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+
+        // Debe estar PENDING
+        if (o.getStatus() != OrderStatus.PENDING) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "Solo se puede confirmar una orden en estado PENDING.");
+        }
+
+        // No permitir re-confirmar si ya tiene un pago activo
+        if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
+            // Idempotencia: devolvemos OK con el estado actual
+            return ServiceResult.ok(orderMapper.toResponse(o));
+        }
+
+        // Validaciones duras
+        if (o.getItems() == null || o.getItems().isEmpty()) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "La orden no tiene ítems.");
+        }
+        if (o.getShippingAddress() == null) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta la dirección de envío.");
+        }
+        if (o.getBillingInfo() == null) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta la información de facturación.");
+        }
+        if (o.getChosenPaymentMethod() == null) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta el método de pago.");
+        }
+
+        // Recalcular totales por última vez
+        recalcTotals(o);
+
+        // Crear registro de Payment (aún sin ir al gateway)
+        Payment p = new Payment();
+        p.setOrder(o);
+        p.setMethod(o.getChosenPaymentMethod());
+        p.setStatus(PaymentStatus.INITIATED);
+        p.setAmount(o.getTotalAmount());
+        // Opcional: guardar metadata del init (URLs, etc.)
+        // p.setInitSuccessUrl(req != null ? req.getSuccessUrl() : null);  // si tenés campos
+        // p.setInitFailureUrl(req != null ? req.getFailureUrl() : null);
+        // p.setCallbackUrl(req != null ? req.getCallbackUrl() : null);
+
+        paymentRepo.save(p);
+        // `Payment` es el dueño? (tu entity mapea @OneToOne con FK en payments)
+        // Si tu mapeo requiere setear en Order:
+        o.setPayment(p);
+
+        Order saved = orderRepo.save(o);
+
+        // (Opcional) acá podrías ya inicializar el provider (MP/Stripe) y actualizar `p`
+        // con preferenceId/initPoint. Si preferís, hacelo en otro endpoint /payments/{id}/init.
+
+        return ServiceResult.ok(orderMapper.toResponse(saved));
     }
 
+    // ====== PATCH Billing ======
+    @Override
+    @Transactional
+    public ServiceResult<OrderResponse> patchBillingProfile(Long orderId, UpdateBillingProfileRequest req) {
 
-    private BigDecimal calcularEnvio(Address shipAddr) {
-        // TODO: integrar cotización real (Andreani/OCA/etc.)
+        Long uid = currentUserId();
+        Order o = orderRepo.findByIdAndUserId(orderId, uid)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+
+        if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "La orden ya tiene un pago iniciado. No se puede modificar.");
+        }
+
+        if (o.getStatus() != OrderStatus.PENDING) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede modificar facturación mientras la orden está PENDING.");
+        }
+
+        BillingProfile bp = billingRepo.findById(req.getBillingProfileId())
+                .orElseThrow(() -> new RecursoNoEncontradoException("Perfil de facturación no encontrado"));
+
+        Address billingAddr = bp.getBillingAddress();
+        if (billingAddr == null) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "El perfil de facturación no tiene dirección asociada");
+        }
+
+        o.setBillingInfo(SnapshotMapper.toSnapshot(bp, billingAddr));
+
+        // Si tu cálculo de impuestos depende de billing, recalcular:
+        recalcTotals(o);
+
+        Order saved = orderRepo.save(o);
+        return ServiceResult.ok(orderMapper.toResponse(saved));
+    }
+
+    // ====== PATCH Payment (ya lo tenías, lo mantengo con un par de ajustes menores) ======
+    @Override
+    @Transactional
+    public ServiceResult<OrderResponse> patchPaymentMethod(Long orderId, UpdatePaymentMethodRequest req) {
+        Long uid = currentUserId();
+        Order o = orderRepo.findByIdAndUserId(orderId, uid)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+
+        if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "La orden ya tiene un pago iniciado. No se puede modificar.");
+        }
+
+        if (o.getStatus() != OrderStatus.PENDING) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede cambiar el método de pago mientras la orden está PENDING.");
+        }
+        // Si hay un Payment ya iniciado, hacer validaciones acá.
+
+        o.setChosenPaymentMethod(req.getPaymentMethod());
+        Order saved = orderRepo.save(o);
+        return ServiceResult.ok(orderMapper.toResponse(saved));
+    }
+
+    // ===== Helpers =====
+
+    private void recalcTotals(Order o) {
+        BigDecimal subTotal = o.getItems().stream()
+                .map(OrderItem::getLineTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal shippingCost = (o.getShippingAddress() != null)
+                ? calcularEnvio(o.getShippingAddress())
+                : BigDecimal.ZERO;
+
+        BigDecimal taxAmount = calcularImpuestos(subTotal, o.getBillingInfo());
+
+        BigDecimal discountTotal = o.getDiscountTotal() != null ? o.getDiscountTotal() : BigDecimal.ZERO;
+
+        BigDecimal total = subTotal.subtract(discountTotal).add(shippingCost).add(taxAmount);
+        if (total.compareTo(BigDecimal.ZERO) < 0) total = BigDecimal.ZERO;
+
+        o.setSubTotal(subTotal);
+        o.setShippingCost(shippingCost);
+        o.setTaxAmount(taxAmount);
+        o.setDiscountTotal(discountTotal);
+        o.setTotalAmount(total);
+    }
+
+    private BigDecimal calcularEnvio(Object anyShippingSnapshot) {
+        // TODO: integrar cotizador real (Andreani/OCA/etc.)
         return new BigDecimal("0.00");
     }
 
-    private BigDecimal calcularImpuestos(BigDecimal subTotal) {
-        // TODO: IVA/impuestos reales
+    private BigDecimal calcularImpuestos(BigDecimal subTotal, BillingSnapshot billing) {
+        // TODO: calcular IVA según condición impositiva del billing
         return subTotal.multiply(new BigDecimal("0.00"));
     }
 }

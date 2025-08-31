@@ -6,6 +6,8 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
+import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -59,9 +61,27 @@ public class Payment {
     @Column(length = 150, unique = true)
     private String providerPaymentId;
 
-    @Column(nullable = false)
+    @CreationTimestamp
+    @Column(name="created_at", nullable=false, updatable=false)
     private LocalDateTime createdAt;
 
+    @UpdateTimestamp
+    @Column(name="updated_at")
     private LocalDateTime updatedAt;
+
+    // en Payment.java
+    @Column
+    private LocalDateTime expiresAt;    // p/ tiempo límite (1h o 48h)
+
+    @Column(length = 200)
+    private String transferReference;   // nro operación/CBU (opcional)
+
+    @Column(length = 300)
+    private String receiptUrl;          // comprobante (opcional)
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String providerMetadata;    // JSON liviano (preferenceId, initPoint, etc.)
+
 
 }
