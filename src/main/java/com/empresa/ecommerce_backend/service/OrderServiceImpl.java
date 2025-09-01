@@ -16,6 +16,7 @@ import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.model.embeddable.BillingSnapshot;
 import com.empresa.ecommerce_backend.repository.*;
 import com.empresa.ecommerce_backend.service.interfaces.OrderService;
+import com.empresa.ecommerce_backend.service.interfaces.PaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -38,6 +39,7 @@ public class OrderServiceImpl implements OrderService {
     private final CartRepository cartRepo;
     private final PaymentRepository paymentRepo;
     private final OrderMapper orderMapper;
+    private final PaymentService paymentService;
 
     private Long currentUserId() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
@@ -179,19 +181,12 @@ public class OrderServiceImpl implements OrderService {
         Order o = orderRepo.findByIdAndUserId(orderId, uid)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
 
-        // Debe estar PENDING
         if (o.getStatus() != OrderStatus.PENDING) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST,
-                    "Solo se puede confirmar una orden en estado PENDING.");
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo se puede confirmar una orden en estado PENDING.");
         }
-
-        // No permitir re-confirmar si ya tiene un pago activo
         if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
-            // Idempotencia: devolvemos OK con el estado actual
-            return ServiceResult.ok(orderMapper.toResponse(o));
+            return ServiceResult.ok(orderMapper.toResponse(o)); // idempotencia
         }
-
-        // Validaciones duras
         if (o.getItems() == null || o.getItems().isEmpty()) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "La orden no tiene ítems.");
         }
@@ -205,32 +200,12 @@ public class OrderServiceImpl implements OrderService {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta el método de pago.");
         }
 
-        // Recalcular totales por última vez
         recalcTotals(o);
 
-        // Crear registro de Payment (aún sin ir al gateway)
-        Payment p = new Payment();
-        p.setOrder(o);
-        p.setMethod(o.getChosenPaymentMethod());
-        p.setStatus(PaymentStatus.INITIATED);
-        p.setAmount(o.getTotalAmount());
-        // Opcional: guardar metadata del init (URLs, etc.)
-        // p.setInitSuccessUrl(req != null ? req.getSuccessUrl() : null);  // si tenés campos
-        // p.setInitFailureUrl(req != null ? req.getFailureUrl() : null);
-        // p.setCallbackUrl(req != null ? req.getCallbackUrl() : null);
-
-        paymentRepo.save(p);
-        // `Payment` es el dueño? (tu entity mapea @OneToOne con FK en payments)
-        // Si tu mapeo requiere setear en Order:
-        o.setPayment(p);
-
-        Order saved = orderRepo.save(o);
-
-        // (Opcional) acá podrías ya inicializar el provider (MP/Stripe) y actualizar `p`
-        // con preferenceId/initPoint. Si preferís, hacelo en otro endpoint /payments/{id}/init.
-
-        return ServiceResult.ok(orderMapper.toResponse(saved));
+        // 👇 Toda la inicialización de pago (transferencia/MP) vive en PaymentService
+        return paymentService.initPaymentForOrder(o, o.getChosenPaymentMethod());
     }
+
 
     // ====== PATCH Billing ======
     @Override

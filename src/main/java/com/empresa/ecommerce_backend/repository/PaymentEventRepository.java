@@ -7,5 +7,4 @@ import com.empresa.ecommerce_backend.model.PaymentEvent;
 
 public interface PaymentEventRepository extends BaseRepository<PaymentEvent, Long> {
 
-    List<PaymentEvent> findByPayment_IdOrderByEventAtAsc(Long paymentId);
 }

@@ -22,16 +22,11 @@ import java.time.LocalDateTime;
                 @Index(name = "idx_payments_provider_id", columnList = "providerPaymentId", unique = true)
         }
 )
-@Getter
-@Setter
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(exclude = "order")
 public class Payment {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @EqualsAndHashCode.Include
     private Long id;
 
@@ -40,26 +35,33 @@ public class Payment {
     @NotNull
     private Order order;
 
-    @Column(nullable = false, precision = 15, scale = 2)
-    @NotNull
-    @DecimalMin("0.00")
+    @Column(nullable = false, precision = 15, scale = 2) @NotNull @DecimalMin("0.00")
     private BigDecimal amount;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    @NotNull
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) @NotNull
     private PaymentMethod method;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    @NotNull
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 30) @NotNull
     private PaymentStatus status;
 
     @Column(length = 100)
-    private String provider; // Stripe, MercadoPago, etc.
+    private String provider; // MercadoPago, Stripe, etc.
 
     @Column(length = 150, unique = true)
     private String providerPaymentId;
+
+    @Column
+    private LocalDateTime expiresAt;
+
+    @Column(length = 200)
+    private String transferReference;
+
+    @Column(length = 300)
+    private String receiptUrl;
+
+    @Lob
+    @Column(columnDefinition = "TEXT")
+    private String providerMetadata; // JSON (init_point, pref_id, etc.)
 
     @CreationTimestamp
     @Column(name="created_at", nullable=false, updatable=false)
@@ -68,20 +70,4 @@ public class Payment {
     @UpdateTimestamp
     @Column(name="updated_at")
     private LocalDateTime updatedAt;
-
-    // en Payment.java
-    @Column
-    private LocalDateTime expiresAt;    // p/ tiempo límite (1h o 48h)
-
-    @Column(length = 200)
-    private String transferReference;   // nro operación/CBU (opcional)
-
-    @Column(length = 300)
-    private String receiptUrl;          // comprobante (opcional)
-
-    @Lob
-    @Column(columnDefinition = "TEXT")
-    private String providerMetadata;    // JSON liviano (preferenceId, initPoint, etc.)
-
-
 }

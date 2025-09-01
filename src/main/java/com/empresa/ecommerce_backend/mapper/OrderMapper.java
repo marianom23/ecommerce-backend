@@ -59,14 +59,30 @@ public interface OrderMapper {
     })
     OrderItemResponse toItemResponse(OrderItem item);
 
+
     default PaymentSummaryResponse toPaymentSummary(Payment payment) {
         if (payment == null) return null;
+
         PaymentSummaryResponse dto = new PaymentSummaryResponse();
         dto.setMethod(payment.getMethod().name());
         dto.setStatus(payment.getStatus().name());
         dto.setAmount(payment.getAmount());
+
+        // 👇 extraer init_point del JSON que guardaste en providerMetadata
+        String meta = payment.getProviderMetadata();
+        if (meta != null && !meta.isBlank()) {
+            try {
+                var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(meta);
+                String initPoint = node.path("init_point").asText(null);
+                dto.setRedirectUrl(initPoint);
+            } catch (Exception ignored) {
+                // si el JSON no parsea, no rompemos el mapeo
+            }
+        }
+
         return dto;
     }
+
 
     default List<OrderItemResponse> toItemResponses(java.util.List<OrderItem> items) {
         return items.stream().map(this::toItemResponse).toList();

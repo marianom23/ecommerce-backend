@@ -11,4 +11,5 @@ public class PaymentSummaryResponse {
     private String method;
     private String status;
     private BigDecimal amount;
+    private String redirectUrl;
 }
