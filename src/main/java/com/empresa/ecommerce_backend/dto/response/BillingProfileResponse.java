@@ -10,6 +10,8 @@ import lombok.*;
 public class BillingProfileResponse {
     private Long id;
 
+    private String fullName; // ✅ nuevo
+
     private DocumentType documentType;
     private String documentNumber;
 
@@ -19,5 +21,5 @@ public class BillingProfileResponse {
     private String phone;
 
     private Long billingAddressId;
-    private boolean defaultProfile; // ✅ expuesto así (no isDefault)
+    private boolean defaultProfile;
 }

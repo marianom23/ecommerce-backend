@@ -34,6 +34,11 @@ public class BillingProfile {
     @NotNull
     private User user;
 
+    /** 👇 Nuevo campo */
+    @Column(nullable = false, length = 150)
+    @NotBlank
+    private String fullName;   // Nombre y Apellido del titular
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @NotNull
@@ -64,7 +69,7 @@ public class BillingProfile {
     private Address billingAddress;      // Debe ser type=BILLING
 
     @Column(name = "is_default", nullable = false)
-    private boolean defaultProfile = false; // ✅ NO usar "isDefault" como nombre de campo
+    private boolean defaultProfile = false;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

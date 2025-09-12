@@ -10,6 +10,10 @@ import lombok.Setter;
 @Getter @Setter
 public class BillingProfileRequest {
 
+    @NotBlank
+    @Size(max = 150)
+    private String fullName; // ✅ nuevo
+
     @NotNull
     private DocumentType documentType;
 
@@ -31,7 +35,7 @@ public class BillingProfileRequest {
     private String phone;
 
     @NotNull
-    private Long billingAddressId; // FK a Address (type = BILLING)
+    private Long billingAddressId;
 
-    private Boolean isDefault; // opcional: si true, se setea como único default
+    private Boolean isDefault;
 }

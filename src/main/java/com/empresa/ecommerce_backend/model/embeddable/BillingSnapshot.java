@@ -10,15 +10,18 @@ import lombok.*;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 public class BillingSnapshot {
 
+    @Column(length = 150)
+    private String fullName; // ✅ nuevo
+
     @Enumerated(EnumType.STRING)
-    @Column(length = 20) // era nullable = false
+    @Column(length = 20)
     private DocumentType documentType;
 
-    @Column(length = 20) // era nullable = false
+    @Column(length = 20)
     private String documentNumber;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 30) // era nullable = false
+    @Column(length = 30)
     private TaxCondition taxCondition;
 
     @Column(length = 150) private String businessName;
@@ -26,12 +29,12 @@ public class BillingSnapshot {
     @Column(length = 50)  private String phone;
 
     // Dirección fiscal congelada
-    @Column(length = 150) private String street;          // era nullable = false
+    @Column(length = 150) private String street;
     @Column(length = 20)  private String streetNumber;
-    @Column(length = 100) private String city;            // era nullable = false
+    @Column(length = 100) private String city;
     @Column(length = 100) private String state;
     @Column(length = 20)  private String postalCode;
-    @Column(length = 100) private String country;         // era nullable = false
+    @Column(length = 100) private String country;
     @Column(length = 20)  private String apartmentNumber;
     @Column(length = 10)  private String floor;
 }

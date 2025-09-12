@@ -35,6 +35,7 @@ public class OrderResponse {
     private String shippingPhone;
 
     // Billing snapshot (campos planos)
+    private String billingFullName;
     private String billingDocumentType;
     private String billingDocumentNumber;
     private String billingTaxCondition;

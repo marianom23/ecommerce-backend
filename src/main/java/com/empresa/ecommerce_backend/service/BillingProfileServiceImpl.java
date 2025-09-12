@@ -59,7 +59,7 @@ public class BillingProfileServiceImpl implements BillingProfileService {
 
         BillingProfile entity = mapper.toEntity(dto);
         entity.setUser(user);
-        mapper.setAddress(entity, addr);
+        entity.setBillingAddress(addr);
 
         boolean wantDefault = Boolean.TRUE.equals(dto.getIsDefault());
         if (wantDefault) {

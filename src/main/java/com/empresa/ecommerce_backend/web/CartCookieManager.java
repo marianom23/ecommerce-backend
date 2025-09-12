@@ -36,14 +36,31 @@ public class CartCookieManager {
         }
     }
 
-    private void setCookie(HttpServletResponse response, String sessionId, boolean secure) {
-        ResponseCookie cookie = ResponseCookie.from(CART_COOKIE, sessionId)
+    private void setCookie(HttpServletResponse response, String sessionId, boolean secureRequest) {
+        boolean prod = isProd(); // podés basarte en SPRING_PROFILES_ACTIVE o en secureRequest
+
+        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(CART_COOKIE, sessionId)
                 .httpOnly(true)
-                .secure(secure)    // dev (HTTP): false, prod (HTTPS): true
-                .sameSite("None")
                 .path("/")
-                .maxAge(Duration.ofDays(30))
-                .build();
-        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+                .maxAge(Duration.ofDays(30));
+
+        if (prod) {
+            builder.secure(true);
+            builder.sameSite("None"); // para cross-site en prod
+        } else {
+            builder.secure(false);
+            builder.sameSite("Lax"); // para dev en http://localhost
+        }
+
+        response.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString());
     }
+
+    private boolean isProd() {
+        String profile = System.getProperty("spring.profiles.active");
+        if (profile == null) {
+            profile = System.getenv("SPRING_PROFILES_ACTIVE");
+        }
+        return "prod".equalsIgnoreCase(profile);
+    }
+
 }

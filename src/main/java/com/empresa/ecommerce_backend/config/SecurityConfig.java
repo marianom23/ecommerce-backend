@@ -45,6 +45,9 @@ public class SecurityConfig {
                                 "/api/oauth2/callback"
                         ).permitAll()
 
+                        // ✅ Webhook de Mercado Pago (sin auth)
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/mercadopago").permitAll()
+
                         // ⛔️ SOLO attach requiere auth (todos los métodos sobre esa ruta)
                         .requestMatchers("/api/cart/attach").authenticated()
 

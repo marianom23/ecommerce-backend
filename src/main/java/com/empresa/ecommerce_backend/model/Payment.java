@@ -1,3 +1,4 @@
+// src/main/java/com/empresa/ecommerce_backend/model/Payment.java
 package com.empresa.ecommerce_backend.model;
 
 import com.empresa.ecommerce_backend.enums.PaymentMethod;
@@ -19,13 +20,17 @@ import java.time.LocalDateTime;
                 @Index(name = "idx_payments_order", columnList = "order_id", unique = true),
                 @Index(name = "idx_payments_status", columnList = "status"),
                 @Index(name = "idx_payments_method", columnList = "method"),
-                @Index(name = "idx_payments_provider_id", columnList = "providerPaymentId", unique = true)
+                // payment_id de MP (único cuando llega)
+                @Index(name = "idx_payments_provider_payment", columnList = "providerPaymentId", unique = true),
+                // preference_id de MP (NO único)
+                @Index(name = "idx_payments_provider_pref", columnList = "providerPreferenceId")
         }
 )
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
 @ToString(exclude = "order")
 public class Payment {
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @EqualsAndHashCode.Include
     private Long id;
@@ -45,8 +50,13 @@ public class Payment {
     private PaymentStatus status;
 
     @Column(length = 100)
-    private String provider; // MercadoPago, Stripe, etc.
+    private String provider; // "MERCADO_PAGO"
 
+    // Nuevo: preference_id (no único)
+    @Column(length = 150)
+    private String providerPreferenceId;
+
+    // payment_id real de MP (único cuando existe)
     @Column(length = 150, unique = true)
     private String providerPaymentId;
 
@@ -61,7 +71,7 @@ public class Payment {
 
     @Lob
     @Column(columnDefinition = "TEXT")
-    private String providerMetadata; // JSON (init_point, pref_id, etc.)
+    private String providerMetadata; // JSON (init_point, etc.)
 
     @CreationTimestamp
     @Column(name="created_at", nullable=false, updatable=false)

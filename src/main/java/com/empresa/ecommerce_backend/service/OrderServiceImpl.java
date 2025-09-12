@@ -22,7 +22,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.empresa.ecommerce_backend.dto.response.OrderSummaryResponse;
+import com.empresa.ecommerce_backend.dto.response.PageResponse;
+import com.empresa.ecommerce_backend.repository.projection.OrderSummaryProjection;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -49,6 +53,15 @@ public class OrderServiceImpl implements OrderService {
         } catch (Exception e) {
             throw new IllegalStateException("No se pudo obtener ID de usuario autenticado");
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<OrderResponse> getOneByNumber(String orderNumber) {
+        Long uid = currentUserId();
+        Order o = orderRepo.findByOrderNumberAndUserId(orderNumber, uid)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        return ServiceResult.ok(orderMapper.toResponse(o));
     }
 
     // ====== Crear SIN body, solo logged-in ======
@@ -128,6 +141,15 @@ public class OrderServiceImpl implements OrderService {
         Order o = orderRepo.findByIdAndUserId(id, uid)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
         return ServiceResult.ok(orderMapper.toResponse(o));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<PageResponse<OrderSummaryResponse>> listMineSummaries(Pageable pageable) {
+        Long uid = currentUserId();
+        Page<OrderSummaryProjection> page = orderRepo.findSummariesByUserId(uid, pageable);
+        Page<OrderSummaryResponse> mapped = page.map(orderMapper::toSummary);
+        return ServiceResult.ok(PageResponse.of(mapped));
     }
 
     @Override

@@ -30,7 +30,8 @@ public final class SnapshotMapper {
         if (bp == null || billingAddr == null) return null;
         BillingSnapshot s = new BillingSnapshot();
 
-        // 🔹 Datos fiscales/personales del perfil de facturación
+        s.setFullName(bp.getFullName()); // ✅ nuevo
+
         s.setDocumentType(bp.getDocumentType());
         s.setDocumentNumber(bp.getDocumentNumber());
         s.setTaxCondition(bp.getTaxCondition());
@@ -38,7 +39,6 @@ public final class SnapshotMapper {
         s.setEmailForInvoices(bp.getEmailForInvoices());
         s.setPhone(bp.getPhone());
 
-        // 🔹 Dirección fiscal (snapshot de Address)
         s.setStreet(billingAddr.getStreet());
         s.setStreetNumber(billingAddr.getStreetNumber());
         s.setCity(billingAddr.getCity());

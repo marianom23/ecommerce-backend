@@ -1,12 +1,9 @@
 // src/main/java/com/empresa/ecommerce_backend/mapper/OrderMapper.java
 package com.empresa.ecommerce_backend.mapper;
 
-import com.empresa.ecommerce_backend.dto.response.OrderItemResponse;
-import com.empresa.ecommerce_backend.dto.response.OrderResponse;
-import com.empresa.ecommerce_backend.dto.response.PaymentSummaryResponse;
-import com.empresa.ecommerce_backend.model.Order;
-import com.empresa.ecommerce_backend.model.OrderItem;
-import com.empresa.ecommerce_backend.model.Payment;
+import com.empresa.ecommerce_backend.dto.response.*;
+import com.empresa.ecommerce_backend.model.*;
+import com.empresa.ecommerce_backend.repository.projection.OrderSummaryProjection;
 import org.mapstruct.*;
 
 import java.util.List;
@@ -14,7 +11,7 @@ import java.util.List;
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface OrderMapper {
 
-    // ---------- Order -> OrderResponse ----------
+    // ---------- Order -> OrderResponse (ya lo tenías) ----------
     @Mappings({
             @Mapping(target = "shippingStreet", source = "shippingAddress.street"),
             @Mapping(target = "shippingStreetNumber", source = "shippingAddress.streetNumber"),
@@ -27,6 +24,7 @@ public interface OrderMapper {
             @Mapping(target = "shippingRecipientName", source = "shippingAddress.recipientName"),
             @Mapping(target = "shippingPhone", source = "shippingAddress.phone"),
 
+            @Mapping(target = "billingFullName", source = "billingInfo.fullName"),
             @Mapping(target = "billingDocumentType", source = "billingInfo.documentType"),
             @Mapping(target = "billingDocumentNumber", source = "billingInfo.documentNumber"),
             @Mapping(target = "billingTaxCondition", source = "billingInfo.taxCondition"),
@@ -46,12 +44,25 @@ public interface OrderMapper {
                     expression = "java(order.getChosenPaymentMethod() != null ? order.getChosenPaymentMethod().name() : null)"),
             @Mapping(target = "payment", expression = "java(toPaymentSummary(order.getPayment()))"),
 
-            // items se mapea con method reference
             @Mapping(target = "items", expression = "java(toItemResponses(order.getItems()))")
     })
     OrderResponse toResponse(Order order);
 
-    // ---------- OrderItem -> OrderItemResponse ----------
+    // ---------- NUEVO: Projection -> OrderSummaryResponse ----------
+    default OrderSummaryResponse toSummary(OrderSummaryProjection p) {
+        if (p == null) return null;
+        return OrderSummaryResponse.builder()
+                .id(p.getId())
+                .orderNumber(p.getOrderNumber())
+                .orderDate(p.getOrderDate())
+                .status(p.getStatus())
+                .totalAmount(p.getTotalAmount())
+                .itemCount(p.getItemCount())
+                .firstItemThumb(p.getFirstItemThumb())
+                .build();
+    }
+
+    // ---------- Items ----------
     @Mappings({
             @Mapping(target = "productId", source = "variant.product.id"),
             @Mapping(target = "variantId", source = "variant.id"),
@@ -59,7 +70,11 @@ public interface OrderMapper {
     })
     OrderItemResponse toItemResponse(OrderItem item);
 
+    default List<OrderItemResponse> toItemResponses(java.util.List<OrderItem> items) {
+        return items.stream().map(this::toItemResponse).toList();
+    }
 
+    // ---------- Payment ----------
     default PaymentSummaryResponse toPaymentSummary(Payment payment) {
         if (payment == null) return null;
 
@@ -68,24 +83,14 @@ public interface OrderMapper {
         dto.setStatus(payment.getStatus().name());
         dto.setAmount(payment.getAmount());
 
-        // 👇 extraer init_point del JSON que guardaste en providerMetadata
         String meta = payment.getProviderMetadata();
         if (meta != null && !meta.isBlank()) {
             try {
                 var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(meta);
                 String initPoint = node.path("init_point").asText(null);
                 dto.setRedirectUrl(initPoint);
-            } catch (Exception ignored) {
-                // si el JSON no parsea, no rompemos el mapeo
-            }
+            } catch (Exception ignored) { }
         }
-
         return dto;
     }
-
-
-    default List<OrderItemResponse> toItemResponses(java.util.List<OrderItem> items) {
-        return items.stream().map(this::toItemResponse).toList();
-    }
-
 }
