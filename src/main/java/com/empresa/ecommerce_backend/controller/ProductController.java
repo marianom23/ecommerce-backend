@@ -3,14 +3,13 @@ package com.empresa.ecommerce_backend.controller;
 
 import com.empresa.ecommerce_backend.dto.request.ProductPaginatedRequest;
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
-import com.empresa.ecommerce_backend.dto.response.PaginatedResponse;
-import com.empresa.ecommerce_backend.dto.response.ProductDetailsResponse;
-import com.empresa.ecommerce_backend.dto.response.ProductResponse;
-import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.dto.response.*;
 import com.empresa.ecommerce_backend.service.interfaces.ProductDetailsService;
 import com.empresa.ecommerce_backend.service.interfaces.ProductService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -52,5 +51,11 @@ public class ProductController {
     @GetMapping("/{id}/details")
     public ServiceResult<ProductDetailsResponse> getProductDetails(@PathVariable Long id) {
         return productDetailsService.getDetails(id); // -> 200 OK (ServiceResult.ok)
+    }
+
+    @Operation(summary = "Facetas de productos (categorías, marcas y rango de precio)")
+    @GetMapping("/facets")
+    public ServiceResult<ProductFacetsResponse> getFacets(ProductPaginatedRequest params) {
+        return productService.getProductFacets(params);
     }
 }

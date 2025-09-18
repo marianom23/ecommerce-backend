@@ -2,13 +2,13 @@ package com.empresa.ecommerce_backend.service;
 
 import com.empresa.ecommerce_backend.dto.request.ProductPaginatedRequest;
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
-import com.empresa.ecommerce_backend.dto.response.PaginatedResponse;
-import com.empresa.ecommerce_backend.dto.response.ProductResponse;
-import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.dto.response.*;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.ProductMapper;
 import com.empresa.ecommerce_backend.mapper.ProductPageMapper;
 import com.empresa.ecommerce_backend.model.Product;
+import com.empresa.ecommerce_backend.repository.BrandRepository;
+import com.empresa.ecommerce_backend.repository.CategoryRepository;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
 import com.empresa.ecommerce_backend.repository.ProductVariantRepository;
 import com.empresa.ecommerce_backend.repository.spec.ProductSpecs;
@@ -22,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +32,8 @@ import static org.springframework.data.jpa.domain.Specification.allOf;
 @Service
 public class ProductServiceImpl implements ProductService {
 
+    private final CategoryRepository categoryRepository;
+    private final BrandRepository brandRepository;
     private final ProductRepository productRepository;
     private final ProductMapper productMapper;
     private final ProductPageMapper productPageMapper;
@@ -91,6 +94,36 @@ public class ProductServiceImpl implements ProductService {
         var response = productPageMapper.toPaginatedResponse(mapped, params);
         return ServiceResult.ok(response);
     }
+
+    @Override
+    public ServiceResult<ProductFacetsResponse> getProductFacets(ProductPaginatedRequest params) {
+
+        final String q = (params.getQ() == null || params.getQ().isBlank())
+                ? null
+                : params.getQ().toLowerCase(java.util.Locale.ROOT);
+        final String namePattern = (q == null) ? null : "%" + q + "%";
+
+        final Boolean inStockOnly = params.getInStockOnly();
+        final BigDecimal minPrice = params.getMinPrice();
+        final BigDecimal maxPrice = params.getMaxPrice();
+
+        var categoryFacets = categoryRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
+        var brandFacets    = brandRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
+        var pr             = productRepository.findPriceRange(namePattern, inStockOnly, minPrice, maxPrice);
+
+        var dto = new ProductFacetsResponse();
+        dto.setCategoryFacets(categoryFacets);
+        dto.setBrandFacets(brandFacets);
+        dto.setPriceRange(new PriceRangeResponse(
+                (pr != null) ? pr.getMinPrice() : null,
+                (pr != null) ? pr.getMaxPrice() : null
+        ));
+
+        return ServiceResult.ok(dto);
+    }
+
+
+
 
     private Sort resolveSort(String sortKey) {
         if (sortKey == null) sortKey = "latest";

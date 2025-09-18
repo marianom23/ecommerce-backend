@@ -55,7 +55,13 @@ public class SecurityConfig {
                         .requestMatchers("/api/cart/**").permitAll()
 
                         // Productos (lectura pública)
+                        // PÚBLICOS: /p/products y facetas
+                        .requestMatchers(HttpMethod.GET, "/p/products/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/p/products/**").permitAll()
+
+                        // ⚠️ Si tu front pega a /api/p/products/** (Next JS proxy con prefijo /api), permití también estas:
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/api/products/**").permitAll()
 
                         // Productos/variants solo ADMIN
                         .requestMatchers(HttpMethod.POST,   "/api/products/**").hasRole("ADMIN")
