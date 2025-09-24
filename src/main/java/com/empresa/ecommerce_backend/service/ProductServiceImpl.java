@@ -23,6 +23,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -69,31 +70,59 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public ServiceResult<PaginatedResponse<ProductResponse>> getAllProductsPaged(ProductPaginatedRequest params) {
         Pageable pageable = productPageMapper.toPageable(params);
-        // Si querés forzar sort acá en vez de en el mapper:
-        // Pageable pageable = PageRequest.of(Math.max(0, params.getPage() - 1), params.getLimit(), resolveSort(params.getSort()));
 
-        // Armar specs sin nulls
-        List<Specification<Product>> parts = new ArrayList<>();
-        if (Boolean.TRUE.equals(params.getInStockOnly())) parts.add(ProductSpecs.inStockOnly(true));
-        if (params.getCategoryId() != null) parts.add(ProductSpecs.hasCategory(params.getCategoryId()));
-        if (params.getBrandId() != null) parts.add(ProductSpecs.hasBrand(params.getBrandId()));
-        if (params.getQ() != null && !params.getQ().isBlank()) parts.add(ProductSpecs.nameContains(params.getQ()));
-        if (params.getMinPrice() != null || params.getMaxPrice() != null)
-            parts.add(ProductSpecs.priceBetween(params.getMinPrice(), params.getMaxPrice()));
-        if (params.getColors() != null && !params.getColors().isEmpty())
-            parts.add(ProductSpecs.colorsIn(params.getColors()));
-        if (params.getSizes() != null && !params.getSizes().isEmpty())
-            parts.add(ProductSpecs.sizesIn(params.getSizes()));
-        if (params.getTags() != null && !params.getTags().isEmpty())
-            parts.add(ProductSpecs.tagsIn(params.getTags()));
+        // normalizar búsqueda
+        final String q = (params.getQ() == null || params.getQ().isBlank())
+                ? null
+                : "%" + params.getQ().toLowerCase(java.util.Locale.ROOT) + "%";
 
-        Specification<Product> spec = parts.isEmpty() ? Specification.allOf() : allOf(parts);
+        // detectar sorts especiales
+        String sort = params.getSort();
+        boolean sortBestSellingWeek = "bestSellingWeek".equalsIgnoreCase(sort);
+        boolean sortBestSellingSince = "bestSellingSince".equalsIgnoreCase(sort) ||
+                ("bestSelling".equalsIgnoreCase(sort) && params.getSinceDays() != null);
 
-        Page<Product> result = productRepository.findAll(spec, pageable);
-        Page<ProductResponse> mapped = result.map(productMapper::toResponse);
+        Page<Product> page;
+
+        if (sortBestSellingWeek || sortBestSellingSince) {
+            int days = sortBestSellingWeek
+                    ? 7
+                    : Math.max(1, params.getSinceDays()); // evita 0 o negativos
+            LocalDateTime since = LocalDateTime.now().minusDays(days);
+
+            page = productRepository.findBestSellingSince(
+                    since,
+                    params.getCategoryId(),
+                    params.getBrandId(),
+                    q,
+                    Boolean.TRUE.equals(params.getInStockOnly()),
+                    pageable
+            );
+        } else {
+            // camino actual con Specifications
+            List<Specification<Product>> parts = new ArrayList<>();
+            if (Boolean.TRUE.equals(params.getInStockOnly())) parts.add(ProductSpecs.inStockOnly(true));
+            if (params.getCategoryId() != null) parts.add(ProductSpecs.hasCategory(params.getCategoryId()));
+            if (params.getBrandId() != null) parts.add(ProductSpecs.hasBrand(params.getBrandId()));
+            if (q != null) parts.add(ProductSpecs.nameContains(params.getQ()));
+            if (params.getMinPrice() != null || params.getMaxPrice() != null)
+                parts.add(ProductSpecs.priceBetween(params.getMinPrice(), params.getMaxPrice()));
+            if (params.getColors() != null && !params.getColors().isEmpty())
+                parts.add(ProductSpecs.colorsIn(params.getColors()));
+            if (params.getSizes() != null && !params.getSizes().isEmpty())
+                parts.add(ProductSpecs.sizesIn(params.getSizes()));
+            if (params.getTags() != null && !params.getTags().isEmpty())
+                parts.add(ProductSpecs.tagsIn(params.getTags()));
+
+            Specification<Product> spec = parts.isEmpty() ? Specification.allOf() : Specification.allOf(parts);
+            page = productRepository.findAll(spec, pageable);
+        }
+
+        Page<ProductResponse> mapped = page.map(productMapper::toResponse);
         var response = productPageMapper.toPaginatedResponse(mapped, params);
         return ServiceResult.ok(response);
     }
+
 
     @Override
     public ServiceResult<ProductFacetsResponse> getProductFacets(ProductPaginatedRequest params) {
@@ -123,15 +152,14 @@ public class ProductServiceImpl implements ProductService {
     }
 
 
-
-
     private Sort resolveSort(String sortKey) {
         if (sortKey == null) sortKey = "latest";
         return switch (sortKey) {
-            case "latest" -> Sort.by(Sort.Direction.DESC, "id");
-            case "bestSelling" -> Sort.by(Sort.Direction.DESC, "id"); // TODO: cambiar a soldCount si lo agregás
-            case "id" -> Sort.by(Sort.Direction.ASC, "id");
-            default -> Sort.by(Sort.Direction.DESC, "id");
+            case "latest"      -> Sort.by(Sort.Direction.DESC, "id");
+            case "bestSelling" -> Sort.by(Sort.Direction.DESC, "soldCount").and(Sort.by(Sort.Direction.DESC, "id"));
+            case "id"          -> Sort.by(Sort.Direction.ASC, "id");
+            default            -> Sort.by(Sort.Direction.DESC, "id");
         };
     }
+
 }

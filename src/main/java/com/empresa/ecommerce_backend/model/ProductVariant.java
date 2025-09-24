@@ -67,4 +67,7 @@ public class ProductVariant {
     // Atributos (talle/color/etc.) si no los modelás en tablas
     @Column(length = 1000)
     private String attributesJson; // {"size":"M","color":"Red"}
+
+    @Column(name = "sold_count", nullable = false)
+    private long soldCount = 0L;
 }

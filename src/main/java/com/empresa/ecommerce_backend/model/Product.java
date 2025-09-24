@@ -72,4 +72,7 @@ public class Product {
             inverseJoinColumns = @JoinColumn(name = "tag_id")
     )
     private Set<Tag> tags = new HashSet<>();
+
+    @Column(name = "sold_count", nullable = false)
+    private long soldCount = 0L;
 }

@@ -9,19 +9,18 @@ import com.empresa.ecommerce_backend.enums.PaymentStatus;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.OrderMapper;
 import com.empresa.ecommerce_backend.model.Order;
+import com.empresa.ecommerce_backend.model.OrderItem;
 import com.empresa.ecommerce_backend.model.Payment;
 import com.empresa.ecommerce_backend.model.PaymentEvent;
 import com.empresa.ecommerce_backend.repository.*;
 import com.empresa.ecommerce_backend.service.interfaces.PaymentService;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-
-import java.io.IOException;
+import com.empresa.ecommerce_backend.repository.ProductRepository;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -39,6 +38,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentEventRepository paymentEventRepo;
     private final ProductVariantRepository variantRepo;
     private final OrderMapper orderMapper;
+    private final ProductRepository productRepo;
 
     @Value("${mp.access-token}")
     private String mpAccessToken;
@@ -124,10 +124,17 @@ public class PaymentServiceImpl implements PaymentService {
             saveEvent(p, prev, newStatus, "webhook:MERCADO_PAGO", null);
 
             switch (newStatus) {
-                case APPROVED -> { o.setStatus(OrderStatus.PAID);     orderRepo.save(o); }
+                case APPROVED -> {
+                    // 👇 Marcar orden como pagada + timestamp y registrar ventas
+                    if (o.getPaidAt() == null) o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
+                    o.setStatus(OrderStatus.PAID);
+                    registerSale(o); // 👈 NUEVO: suma soldCount en variant y product
+                    orderRepo.save(o);
+                }
                 case REJECTED, CANCELED, EXPIRED -> {
                     rollbackStock(o);
-                    o.setStatus(OrderStatus.CANCELED);               orderRepo.save(o);
+                    o.setStatus(OrderStatus.CANCELED);
+                    orderRepo.save(o);
                 }
                 default -> { /* pending: no tocar orden */ }
             }
@@ -181,7 +188,10 @@ public class PaymentServiceImpl implements PaymentService {
         paymentRepo.save(p);
 
         if (approve) {
+            // 👇 Marcar orden como pagada + timestamp y registrar ventas
+            if (o.getPaidAt() == null) o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
             o.setStatus(OrderStatus.PAID);
+            registerSale(o); // 👈 NUEVO
         } else {
             rollbackStock(o);
             o.setStatus(OrderStatus.CANCELED);
@@ -190,6 +200,27 @@ public class PaymentServiceImpl implements PaymentService {
 
         saveEvent(p, prev, p.getStatus(), "admin", note);
         return ServiceResult.ok(orderMapper.toResponse(o));
+    }
+
+    private void registerSale(Order o) {
+        if (o.getItems() == null) return;
+
+        for (OrderItem oi : o.getItems()) {
+            var v = oi.getVariant();
+            if (v == null) continue;
+            var product = v.getProduct();
+            int qty = oi.getQuantity();
+
+            // sumar ventas por SKU
+            v.setSoldCount(v.getSoldCount() + qty);
+            variantRepo.save(v);
+
+            // sumar ventas por producto (ranking catálogo)
+            if (product != null) {
+                product.setSoldCount(product.getSoldCount() + qty);
+                productRepo.save(product);
+            }
+        }
     }
 
     @Override

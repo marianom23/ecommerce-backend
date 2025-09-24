@@ -18,7 +18,8 @@ public class ProductPaginatedRequest {
 
     // orden
     // "latest" | "bestSelling" | "id"
-    private String sort = "latest";
+    private String sort;        // "latest", "bestSelling", "bestSellingWeek", ...
+    private Integer sinceDays;  // ej: 7, 30, 90 (opcional)
 
     // filtros
     private Boolean inStockOnly = false;

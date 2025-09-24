@@ -112,6 +112,8 @@ public class Order {
     @OneToOne(mappedBy = "order", fetch = FetchType.LAZY)
     private Payment payment;
 
+    @Column(name = "paid_at")
+    private LocalDateTime paidAt;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "chosen_payment_method", length = 30)
@@ -123,6 +125,8 @@ public class Order {
     // Envíos
     @OneToMany(mappedBy = "order", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = false)
     private Set<Shipment> shipments = new HashSet<>();
+
+
 
     // Auditoría simple
     @Column(nullable = false) private LocalDateTime createdAt;

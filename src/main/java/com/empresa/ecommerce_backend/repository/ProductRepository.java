@@ -2,6 +2,7 @@
 package com.empresa.ecommerce_backend.repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -57,7 +58,31 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
             @Param("maxPrice") BigDecimal maxPrice
     );
 
-
+    @Query("""
+        SELECT p
+        FROM Product p
+        LEFT JOIN p.variants v
+        LEFT JOIN OrderItem oi ON oi.variant = v
+        LEFT JOIN oi.order o
+        WHERE (:categoryId IS NULL OR p.category.id = :categoryId)
+          AND (:brandId    IS NULL OR p.brand.id    = :brandId)
+          AND (:nameLike   IS NULL OR LOWER(p.name) LIKE LOWER(:nameLike))
+          AND (:inStockOnly = FALSE OR EXISTS (
+                 SELECT 1 FROM ProductVariant v2 WHERE v2.product = p AND v2.stock > 0
+              ))
+          AND (o.status IN ('PAID','SHIPPED','COMPLETED'))
+          AND (o.paidAt IS NOT NULL AND o.paidAt >= :since)
+        GROUP BY p.id
+        ORDER BY COALESCE(SUM(oi.quantity),0) DESC, p.id DESC
+        """)
+    Page<Product> findBestSellingSince(
+            @Param("since") LocalDateTime since,
+            @Param("categoryId") Long categoryId,
+            @Param("brandId") Long brandId,
+            @Param("nameLike") String nameLike,
+            @Param("inStockOnly") boolean inStockOnly,
+            Pageable pageable
+    );
 
 
 
