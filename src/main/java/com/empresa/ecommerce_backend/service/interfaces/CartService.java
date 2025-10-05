@@ -10,17 +10,20 @@ public interface CartService {
 
     ServiceResult<CartResponse> attachCartToUser(String sessionId, Long userId);
 
-    ServiceResult<CartResponse> getOrCreateBySession(String sessionId);
+    // ⚠️ NUEVO: user-first (si userId != null opera por usuario, sino por sessionId)
+    ServiceResult<CartResponse> getOrCreate(Long userId, String sessionId);
 
-    ServiceResult<CartResponse> addItem(String sessionId, AddItemRequest dto);
+    ServiceResult<CartResponse> addItem(Long userId, String sessionId, AddItemRequest dto);
 
-    ServiceResult<CartResponse> updateQuantity(String sessionId, Long itemId, UpdateQtyRequest dto);
+    ServiceResult<CartResponse> updateQuantity(Long userId, String sessionId, Long itemId, UpdateQtyRequest dto);
 
-    ServiceResult<CartResponse> removeItem(String sessionId, Long itemId);
+    ServiceResult<CartResponse> incrementItem(Long userId, String sessionId, Long itemId);
 
-    ServiceResult<CartResponse> clear(String sessionId);
+    ServiceResult<CartResponse> decrementItem(Long userId, String sessionId, Long itemId);
 
-    ServiceResult<CartResponse> incrementItem(String sessionId, Long itemId);
+    ServiceResult<CartResponse> removeItem(Long userId, String sessionId, Long itemId);
 
-    ServiceResult<CartResponse> decrementItem(String sessionId, Long itemId);
+    ServiceResult<CartResponse> clear(Long userId, String sessionId);
+
+    boolean userHasCart(Long userId);
 }

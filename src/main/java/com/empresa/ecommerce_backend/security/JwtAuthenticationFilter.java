@@ -7,21 +7,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import com.empresa.ecommerce_backend.service.JwtServiceImpl;
 
 import java.io.IOException;
-
-//1. JwtAuthenticationFilter
-//🔍 Filtro que se ejecuta en cada request para:
-//Revisar si viene un JWT en el header "Authorization"
-//Validar si el token es correcto y no expiró
-//Si es válido, autentica al usuario en el contexto de Spring Sec
-// 📌 En otras palabras: ¿tiene token? ¿es válido? entonces confío en este usuario.
-
 
 @Component
 @RequiredArgsConstructor
@@ -37,30 +29,44 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // Ignorar solo rutas realmente públicas donde no interesa ni evaluar token
-        if (path.startsWith("/api/login") ||
-                path.startsWith("/api/register") ||
-                path.startsWith("/api/verify-email") ||
-                path.startsWith("/swagger-ui") ||
-                path.startsWith("/api-docs")) {
+        // Rutas realmente públicas (ajusta a tus paths)
+        if (path.startsWith("/api/login")
+                || path.startsWith("/api/register")
+                || path.startsWith("/api/verify-email")
+                || path.startsWith("/swagger-ui")
+                || path.startsWith("/v3/api-docs")) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        // CORS preflight
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        // Si ya hay autenticación en el contexto, no reproceses
+        if (SecurityContextHolder.getContext().getAuthentication() != null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Extrae y valida en un solo paso usando getAuthentication
         String authHeader = request.getHeader("Authorization");
         String token = jwtService.extractTokenFromHeader(authHeader);
 
-        if (token != null && jwtService.isTokenValid(token)) {
-            var authentication = jwtService.getAuthentication(token);
-            if (authentication != null) {
-                ((AbstractAuthenticationToken) authentication)
-                        .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authentication);
+        if (token != null) {
+            try {
+                Authentication authentication = jwtService.getAuthentication(token);
+                if (authentication != null) {
+                    ((AbstractAuthenticationToken) authentication)
+                            .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                }
+            } catch (Exception ignored) {
+                // token inválido/expirado: seguimos sin auth (guest)
+                // También podrías limpiar el contexto por si acaso:
+                SecurityContextHolder.clearContext();
             }
         }
 

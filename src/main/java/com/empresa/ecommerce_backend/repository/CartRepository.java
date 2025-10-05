@@ -3,7 +3,7 @@ package com.empresa.ecommerce_backend.repository;
 
 import java.util.Optional;
 
-import io.lettuce.core.dynamic.annotation.Param;
+import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 

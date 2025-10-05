@@ -1,3 +1,4 @@
+// src/main/java/com/empresa/ecommerce_backend/controller/AuthController.java
 package com.empresa.ecommerce_backend.controller;
 
 import com.empresa.ecommerce_backend.dto.request.LoginRequest;
@@ -7,17 +8,12 @@ import com.empresa.ecommerce_backend.dto.response.LoginResponse;
 import com.empresa.ecommerce_backend.dto.response.RegisterUserResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.service.UserServiceImpl;
+import com.empresa.ecommerce_backend.web.CartCookieManager;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
-
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 
 @RestController
 @RequestMapping("/api")
@@ -25,103 +21,56 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 public class AuthController {
 
     private final UserServiceImpl userServiceImpl;
+    private final CartCookieManager cookieManager; // solo para /logout
 
     /* -------- Registro -------- */
     @PostMapping("/register")
-    @Operation(
-            summary = "Registrar un nuevo usuario",
-            description = "Este endpoint permite registrar un nuevo usuario proporcionando los datos necesarios."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "201", description = "Usuario registrado con éxito"),
-            @ApiResponse(responseCode = "400", description = "Datos incorrectos o incompletos"),
-            @ApiResponse(responseCode = "409", description = "El usuario ya existe")
-    })
-    public ServiceResult<RegisterUserResponse> register(
-            @Valid @RequestBody
-            @Parameter(description = "Datos del nuevo usuario para el registro", required = true)
-            RegisterUserRequest dto) {
-        return userServiceImpl.registerUser(dto);           // devuelve created(...)
+    public ServiceResult<RegisterUserResponse> register(@Valid @RequestBody RegisterUserRequest dto) {
+        return userServiceImpl.registerUser(dto);
     }
 
     /* -------- Verificación de correo -------- */
     @GetMapping("/verify-email")
-    @Operation(
-            summary = "Verificar correo electrónico",
-            description = "Verifica la validez del token de verificación de correo."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Correo electrónico verificado correctamente"),
-            @ApiResponse(responseCode = "400", description = "Token inválido o caducado")
-    })
-    public ServiceResult<Void> verifyEmail(
-            @RequestParam("token")
-            @Parameter(description = "Token de verificación enviado al correo electrónico", required = true)
-            String token) {
-        return userServiceImpl.verifyEmail(token);          // ok() o error(...)
+    public ServiceResult<Void> verifyEmail(@RequestParam("token") String token) {
+        return userServiceImpl.verifyEmail(token);
     }
 
     /* -------- Login -------- */
     @PostMapping("/login")
-    @Operation(
-            summary = "Iniciar sesión",
-            description = "Este endpoint permite a un usuario iniciar sesión utilizando sus credenciales."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Login exitoso"),
-            @ApiResponse(responseCode = "401", description = "Credenciales incorrectas")
-    })
     public ServiceResult<?> login(
-            @Valid @RequestBody
-            @Parameter(description = "Credenciales de login del usuario", required = true)
-            LoginRequest request,
-            HttpServletRequest servletRequest) {
+            @Valid @RequestBody LoginRequest request,
+            HttpServletRequest servletRequest
+    ) {
         String ip = extractClientIp(servletRequest);
-        return userServiceImpl.login(request, ip);          // ok()
+        return userServiceImpl.login(request, ip);
     }
 
-    /* -------- Callback OAuth2 (Google / Azure AD) -------- */
+    /* -------- Callback OAuth2 -------- */
     @PostMapping("/oauth2/callback")
-    @Operation(
-            summary = "Callback de OAuth2",
-            description = "Este endpoint maneja el callback después de un login OAuth2 exitoso (Google / Azure AD)."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Callback procesado correctamente"),
-            @ApiResponse(responseCode = "400", description = "Error en el callback")
-    })
     public ServiceResult<LoginResponse> handleOAuthCallback(
-            @RequestBody
-            @Parameter(description = "Datos del callback OAuth2", required = true)
-            OAuthCallbackRequest dto,
-            HttpServletRequest servletRequest) {
+            @RequestBody OAuthCallbackRequest dto,
+            HttpServletRequest servletRequest
+    ) {
         String ip = extractClientIp(servletRequest);
-        return userServiceImpl.handleOAuthCallback(dto, ip); // ok()
+        // sin lógica de carrito aquí
+        return userServiceImpl.handleOAuthCallback(dto, ip);
     }
 
-    /* -------- Perfil del usuario autenticado -------- */
+    /* -------- Perfil -------- */
     @GetMapping("/me")
-    @Operation(
-            summary = "Obtener perfil de usuario",
-            description = "Este endpoint devuelve el perfil del usuario autenticado."
-    )
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Perfil obtenido correctamente"),
-            @ApiResponse(responseCode = "401", description = "Usuario no autenticado")
-    })
-    public UserDetails getProfile(@AuthenticationPrincipal UserDetails userDetails) {
-        return userDetails;                                 // 200 OK plano
+    public Object getProfile(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal
+            org.springframework.security.core.userdetails.UserDetails userDetails
+    ) {
+        return userDetails;
     }
 
-    /* -------- Logout (stateless) -------- */
+    /* -------- Logout -------- */
     @PostMapping("/logout")
-    @Operation(
-            summary = "Cerrar sesión",
-            description = "Este endpoint permite cerrar la sesión del usuario en el sistema."
-    )
-    @ApiResponse(responseCode = "204", description = "Logout exitoso")
-    public ServiceResult<Void> logout() {
-        return ServiceResult.noContent();                   // 204 No Content
+    public ServiceResult<Void> logout(HttpServletRequest request, HttpServletResponse response) {
+        // borrar cookie cart_session
+        cookieManager.clearSessionCookie(response, request.isSecure());
+        return ServiceResult.noContent(); // 204
     }
 
     /* -------- Utilidad para IP -------- */

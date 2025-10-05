@@ -16,7 +16,6 @@ public class CartCookieManager {
 
     public static final String CART_COOKIE = "cart_session";
 
-    /** Setea la cookie si el carrito se creó o si cambió el sessionId. */
     public void maybeSetSessionCookie(String existingSessionId,
                                       ServiceResult<CartResponse> result,
                                       HttpServletRequest request,
@@ -27,7 +26,7 @@ public class CartCookieManager {
         if (newSessionId == null || newSessionId.isBlank()) return;
 
         boolean created = result.getStatus() != null && result.getStatus().is2xxSuccessful()
-                && result.getStatus().value() == 201; // CREATED
+                && result.getStatus().value() == 201;
 
         boolean changed = existingSessionId == null || !existingSessionId.equals(newSessionId);
 
@@ -36,31 +35,40 @@ public class CartCookieManager {
         }
     }
 
-    private void setCookie(HttpServletResponse response, String sessionId, boolean secureRequest) {
-        boolean prod = isProd(); // podés basarte en SPRING_PROFILES_ACTIVE o en secureRequest
-
-        ResponseCookie.ResponseCookieBuilder builder = ResponseCookie.from(CART_COOKIE, sessionId)
+    public void setCookie(HttpServletResponse response, String sessionId, boolean secureRequest) {
+        boolean prod = isProd();
+        ResponseCookie.ResponseCookieBuilder b = ResponseCookie.from(CART_COOKIE, sessionId)
                 .httpOnly(true)
                 .path("/")
                 .maxAge(Duration.ofDays(30));
 
         if (prod) {
-            builder.secure(true);
-            builder.sameSite("None"); // para cross-site en prod
+            b.secure(true).sameSite("None");
         } else {
-            builder.secure(false);
-            builder.sameSite("Lax"); // para dev en http://localhost
+            b.secure(false).sameSite("Lax");
         }
+        response.addHeader(HttpHeaders.SET_COOKIE, b.build().toString());
+    }
 
-        response.addHeader(HttpHeaders.SET_COOKIE, builder.build().toString());
+    /** 👇 Borrar la cookie (al hacer logout) */
+    public void clearSessionCookie(HttpServletResponse response, boolean secureRequest) {
+        boolean prod = isProd();
+        ResponseCookie.ResponseCookieBuilder b = ResponseCookie.from(CART_COOKIE, "")
+                .httpOnly(true)
+                .path("/")
+                .maxAge(0); // elimina
+
+        if (prod) {
+            b.secure(true).sameSite("None");
+        } else {
+            b.secure(false).sameSite("Lax");
+        }
+        response.addHeader(HttpHeaders.SET_COOKIE, b.build().toString());
     }
 
     private boolean isProd() {
         String profile = System.getProperty("spring.profiles.active");
-        if (profile == null) {
-            profile = System.getenv("SPRING_PROFILES_ACTIVE");
-        }
+        if (profile == null) profile = System.getenv("SPRING_PROFILES_ACTIVE");
         return "prod".equalsIgnoreCase(profile);
     }
-
 }
