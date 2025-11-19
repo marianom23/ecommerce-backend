@@ -2,6 +2,7 @@ package com.empresa.ecommerce_backend.mapper;
 
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
 import com.empresa.ecommerce_backend.dto.response.ProductResponse;
+import com.empresa.ecommerce_backend.enums.FulfillmentType;
 import com.empresa.ecommerce_backend.model.*;
 import org.mapstruct.*;
 
@@ -9,6 +10,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Mapper(componentModel = "spring", unmappedTargetPolicy = ReportingPolicy.IGNORE)
 public interface ProductMapper {
@@ -32,8 +36,8 @@ public interface ProductMapper {
     @Mapping(target = "imgs", expression = "java(buildImages(product))")
     @Mapping(target = "variantCount", expression = "java(product.getVariants() != null ? product.getVariants().size() : 0)")
     @Mapping(target = "defaultVariantId", expression = "java(getDefaultVariantId(product))")
+    @Mapping(target = "fulfillmentType", expression = "java(resolveFulfillmentType(product))") // 👈 NUEVO
     ProductResponse toResponse(Product product);
-
 
     List<ProductResponse> toResponseList(List<Product> products);
 
@@ -62,13 +66,12 @@ public interface ProductMapper {
         return null;
     }
 
-
     /** Precio representativo: el más barato de sus variantes */
     default BigDecimal computeRepresentativePrice(Product p) {
         if (p.getVariants() == null || p.getVariants().isEmpty()) return null;
         return p.getVariants().stream()
                 .map(ProductVariant::getPrice)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .min(BigDecimal::compareTo)
                 .orElse(null);
     }
@@ -105,5 +108,27 @@ public interface ProductMapper {
         imgs.setThumbnails(all.stream().limit(4).toList());
         imgs.setPreviews(all);
         return imgs;
+    }
+
+    /** Tipo de fulfillment representativo del producto:
+     *  - Única variante → su tipo.
+     *  - Varias variantes:
+     *      * si todas comparten el mismo tipo → ese tipo
+     *      * si hay mezcla → "MIXED"
+     */
+    default String resolveFulfillmentType(Product p) {
+        if (p.getVariants() == null || p.getVariants().isEmpty()) {
+            return "PHYSICAL"; // por defecto, para no romper el front
+        }
+        if (p.getVariants().size() == 1) {
+            ProductVariant v = p.getVariants().iterator().next();
+            FulfillmentType ft = v.getFulfillmentType();
+            return ft != null ? ft.name() : "PHYSICAL";
+        }
+        Set<String> types = p.getVariants().stream()
+                .map(ProductVariant::getFulfillmentType)
+                .map(ft -> ft != null ? ft.name() : "PHYSICAL")
+                .collect(Collectors.toSet());
+        return (types.size() == 1) ? types.iterator().next() : "MIXED";
     }
 }

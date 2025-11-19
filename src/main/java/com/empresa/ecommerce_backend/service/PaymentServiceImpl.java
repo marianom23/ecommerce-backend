@@ -63,7 +63,7 @@ public class PaymentServiceImpl implements PaymentService {
         p.setAmount(o.getTotalAmount());
         p.setMethod(method);
         p.setStatus(PaymentStatus.INITIATED);
-        p.setExpiresAt(LocalDateTime.now().plusHours(1));
+        p.setExpiresAt(LocalDateTime.now().plusMinutes(1));
 
         try {
             if (method == PaymentMethod.MERCADO_PAGO || method == PaymentMethod.CARD) {

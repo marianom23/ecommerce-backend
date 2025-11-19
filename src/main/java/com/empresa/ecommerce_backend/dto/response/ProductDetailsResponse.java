@@ -38,6 +38,10 @@ public class ProductDetailsResponse {
     private Map<String, List<String>> variantOptions;
     private List<VariantDto> variants;
 
+    // ← NUEVOS CAMPOS (igual que en ProductResponse)
+    private String fulfillmentType; // e.g., "DELIVERY", "PICKUP"
+    private String type;            // e.g., "SIMPLE" o "VARIABLE"
+
     @Data
     public static class ImagesDto {
         private List<String> thumbnails;

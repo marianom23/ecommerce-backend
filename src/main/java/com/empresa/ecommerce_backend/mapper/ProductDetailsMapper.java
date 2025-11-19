@@ -1,6 +1,7 @@
 package com.empresa.ecommerce_backend.mapper;
 
 import com.empresa.ecommerce_backend.dto.response.ProductDetailsResponse;
+import com.empresa.ecommerce_backend.enums.FulfillmentType;
 import com.empresa.ecommerce_backend.model.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,12 +36,14 @@ public interface ProductDetailsMapper {
     @Mapping(target = "variants",          expression = "java(mapVariants(product, variants))")
     // stock total (suma de variantes)
     @Mapping(target = "stock",             expression = "java(totalVariantStock(variants))")
-
-    // 🔁 Medidas representativas desde la variante (si tu DTO las necesita)
+    // Medidas representativas desde la variante
     @Mapping(target = "weight", expression = "java(representativeWeightKg(variants))")
     @Mapping(target = "length", expression = "java(representativeLengthCm(variants))")
     @Mapping(target = "width",  expression = "java(representativeWidthCm(variants))")
     @Mapping(target = "height", expression = "java(representativeHeightCm(variants))")
+    // NUEVOS: alineados con ProductResponse
+    @Mapping(target = "fulfillmentType", expression = "java(resolveFulfillmentType(product, variants))")
+    @Mapping(target = "type",            expression = "java(resolveProductType(product, variants))")
     ProductDetailsResponse toDetails(Product product, java.util.List<ProductVariant> variants);
 
     // ---------- Precio representativo (mínimo entre variantes) ----------
@@ -88,7 +91,7 @@ public interface ProductDetailsMapper {
         return imgs;
     }
 
-    // ---------- Imágenes de variante (si tu VariantDto las muestra) ----------
+    // ---------- Imágenes de variante ----------
     default ProductDetailsResponse.ImagesDto buildVariantImages(ProductVariant v) {
         List<String> all = (v != null && v.getImages() != null)
                 ? v.getImages().stream()
@@ -149,12 +152,10 @@ public interface ProductDetailsMapper {
                     dto.setId(v.getId());
                     dto.setSku(v.getSku());
                     dto.setPrice(v.getPrice());
-                    dto.setDiscountedPrice(applyBestDiscount(v.getPrice(), productDiscounts)); // descuentos del producto
+                    dto.setDiscountedPrice(applyBestDiscount(v.getPrice(), productDiscounts));
                     dto.setStock(v.getStock());
                     dto.setAttributes(parseAttributesJson(v));
                     dto.setImgs(buildVariantImages(v));
-                    // (opcional) si tu VariantDto tiene medidas:
-                    // dto.setWeightKg(v.getWeightKg()); dto.setLengthCm(v.getLengthCm()); ...
                     return dto;
                 })
                 .toList();
@@ -242,7 +243,7 @@ public interface ProductDetailsMapper {
         }
     }
 
-    // ---------- Representante logístico (para weight/length/width/height a nivel producto) ----------
+    // ---------- Representante logístico ----------
     default ProductVariant representativeVariantForLogistics(List<ProductVariant> variants) {
         if (variants == null || variants.isEmpty()) return null;
 
@@ -270,5 +271,34 @@ public interface ProductDetailsMapper {
     default BigDecimal representativeHeightCm(List<ProductVariant> variants) {
         ProductVariant v = representativeVariantForLogistics(variants);
         return v != null ? v.getHeightCm() : null;
+    }
+
+    // ---------- NUEVOS HELPERS: fulfillment y tipo ----------
+    /** Igual criterio que en ProductMapper:
+     *  - Sin variantes → "PHYSICAL" (fallback para no romper el front)
+     *  - 1 variante → el tipo de esa variante
+     *  - >1 variantes → si todas iguales, ese tipo; si no, "MIXED"
+     */
+    default String resolveFulfillmentType(Product product, List<ProductVariant> variants) {
+        if (variants == null || variants.isEmpty()) return "PHYSICAL";
+        if (variants.size() == 1) {
+            FulfillmentType ft = variants.get(0).getFulfillmentType();
+            return ft != null ? ft.name() : "PHYSICAL";
+        }
+        Set<String> types = variants.stream()
+                .map(ProductVariant::getFulfillmentType)
+                .map(ft -> ft != null ? ft.name() : "PHYSICAL")
+                .collect(Collectors.toSet());
+        return (types.size() == 1) ? types.iterator().next() : "MIXED";
+    }
+
+    /** Tipo de producto a nivel detalle:
+     *  - 0 o 1 variante → "SIMPLE"
+     *  - >1 variantes → "VARIABLE"
+     *  (Si tu entidad Product tiene un campo `type`, podés mapearlo directo en lugar de derivarlo)
+     */
+    default String resolveProductType(Product product, List<ProductVariant> variants) {
+        int count = (variants == null) ? 0 : variants.size();
+        return (count <= 1) ? "SIMPLE" : "VARIABLE";
     }
 }

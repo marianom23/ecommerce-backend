@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.Set;
+import com.empresa.ecommerce_backend.enums.FulfillmentType;
 
 @Component
 @RequiredArgsConstructor
@@ -34,8 +35,10 @@ public class DataSeeder {
         seedBrands();
         seedCategories();
         seedSuppliers();
-        seedProductsAndVariants(); // crea productos + variantes (con logística en variant)
+        seedProductsAndVariants();       // físicos demo
+        seedDigitalOnDemandProducts();   // digitales on demand (marcados con "(digital)")
     }
+
 
     private void seedRoles() {
         for (RoleName roleName : RoleName.values()) {
@@ -109,6 +112,53 @@ public class DataSeeder {
             return supplierRepository.save(supplier);
         });
     }
+
+    private void seedDigitalOnDemandProducts() {
+        // Evitá duplicar si ya corriste el seeder antes (chequeo rápido por SKU prefix)
+        final String skuPrefix = "DIG-ONDEM-";
+
+        Category defaultCategory = categoryRepository.findById(1L).orElseThrow();
+        Brand defaultBrand = brandRepository.findById(1L).orElseThrow();
+
+        for (int i = 1; i <= 10; i++) {
+            Product product = new Product();
+            product.setName("Licencia Software Pro " + i + " (digital)");
+            product.setDescription("Clave digital bajo demanda. Recibirás tu key por email dentro de 1–12 horas.");
+            product.setSku("SKU-DIG-" + String.format("%03d", i)); // SKU base opcional
+            product.setCategory(defaultCategory);
+            product.setBrand(defaultBrand);
+
+            // Imagen genérica
+            ProductImage img = new ProductImage();
+            img.setProduct(product);
+            img.setUrl("https://picsum.photos/seed/digital-" + i + "/1200/800");
+            img.setAltText("Producto digital " + i);
+            img.setPosition(1);
+            product.getImages().add(img);
+
+            Product saved = productRepository.save(product);
+
+            // Variante DIGITAL_ON_DEMAND (stock ignorado; dimensiones/peso nulo)
+            ProductVariant v = new ProductVariant();
+            v.setProduct(saved);
+            v.setSku(skuPrefix + String.format("%03d", i));
+            v.setPrice(BigDecimal.valueOf(1500 + (i * 10)));  // precio demo
+            v.setStock(0);                                     // no aplica, pero lo dejamos en 0
+            v.setFulfillmentType(FulfillmentType.DIGITAL_ON_DEMAND);
+            v.setLeadTimeMinHours(1);
+            v.setLeadTimeMaxHours(12);
+            v.setAttributesJson("{\"plataforma\":\"PC\",\"region\":\"Global\"}");
+
+            // Para digitales: logística no aplica → dejá null
+            v.setWeightKg(null);
+            v.setLengthCm(null);
+            v.setWidthCm(null);
+            v.setHeightCm(null);
+
+            productVariantRepository.save(v);
+        }
+    }
+
 
     /**
      * Crea 50 productos (solo catálogo) y genera variantes:

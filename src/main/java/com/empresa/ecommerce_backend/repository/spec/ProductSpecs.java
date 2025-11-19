@@ -1,6 +1,7 @@
 // src/main/java/com/empresa/ecommerce_backend/repository/spec/ProductSpecs.java
 package com.empresa.ecommerce_backend.repository.spec;
 
+import com.empresa.ecommerce_backend.enums.FulfillmentType;
 import com.empresa.ecommerce_backend.model.Product;
 import org.springframework.data.jpa.domain.Specification;
 
@@ -11,12 +12,20 @@ import java.util.List;
 
 public class ProductSpecs {
 
+    /**
+     * Si flag = true:
+     *  - Incluye productos que tengan al menos una variante con stock > 0 (físicos o digitales instant)
+     *  - O una variante con fulfillmentType = DIGITAL_ON_DEMAND (ignora stock)
+     */
     public static Specification<Product> inStockOnly(Boolean flag) {
         if (!Boolean.TRUE.equals(flag)) return null;
         return (root, query, cb) -> {
             query.distinct(true);
             var v = root.join("variants", JoinType.INNER);
-            return cb.greaterThan(cb.coalesce(v.get("stock"), 0), 0);
+            return cb.or(
+                    cb.greaterThan(cb.coalesce(v.get("stock"), 0), 0),
+                    cb.equal(v.get("fulfillmentType"), FulfillmentType.DIGITAL_ON_DEMAND)
+            );
         };
     }
 
@@ -55,7 +64,6 @@ public class ProductSpecs {
             query.distinct(true);
             var v = root.join("variants", JoinType.INNER);
             var attr = cb.lower(v.get("attributesJson"));
-            // patrón JSON simple. Si usás JSON nativo de tu DB, podés reemplazar por JSON_EXTRACT con CriteriaBuilder#function
             var predicates = values.stream()
                     .filter(s -> s != null && !s.isBlank())
                     .map(s -> cb.like(attr, "%\"" + key.toLowerCase() + "\":\"" + s.toLowerCase() + "\"%"))

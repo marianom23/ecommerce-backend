@@ -108,7 +108,7 @@ public class Order {
     })
     private BillingSnapshot billingInfo;
 
-    // Pagos: tu Payment ya es dueño (@OneToOne con FK en payments)
+    // Pagos
     @OneToOne(mappedBy = "order", fetch = FetchType.LAZY)
     private Payment payment;
 
@@ -122,21 +122,26 @@ public class Order {
     @Column(name = "coupon_code", length = 50)
     private String couponCode;
 
+    // 🆕 Campo de expiración de la orden
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
+
     // Envíos
     @OneToMany(mappedBy = "order", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = false)
     private Set<Shipment> shipments = new HashSet<>();
 
-
-
     // Auditoría simple
-    @Column(nullable = false) private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
         if (this.orderDate == null) this.orderDate = this.createdAt;
-        if (this.orderNumber == null) this.orderNumber = "ORD-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase();
+        if (this.orderNumber == null) {
+            this.orderNumber = "ORD-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase();
+        }
     }
 
     @PreUpdate

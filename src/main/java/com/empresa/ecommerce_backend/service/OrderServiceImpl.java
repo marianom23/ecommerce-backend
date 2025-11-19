@@ -7,7 +7,11 @@ import com.empresa.ecommerce_backend.dto.request.UpdatePaymentMethodRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateShippingAddressRequest;
 import com.empresa.ecommerce_backend.dto.response.OrderResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.dto.response.OrderSummaryResponse;
+import com.empresa.ecommerce_backend.dto.response.PageResponse;
+import com.empresa.ecommerce_backend.enums.FulfillmentType;
 import com.empresa.ecommerce_backend.enums.OrderStatus;
+import com.empresa.ecommerce_backend.enums.PaymentMethod;
 import com.empresa.ecommerce_backend.enums.PaymentStatus;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.OrderMapper;
@@ -15,18 +19,17 @@ import com.empresa.ecommerce_backend.mapper.SnapshotMapper;
 import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.model.embeddable.BillingSnapshot;
 import com.empresa.ecommerce_backend.repository.*;
+import com.empresa.ecommerce_backend.repository.projection.OrderSummaryProjection;
 import com.empresa.ecommerce_backend.service.interfaces.OrderService;
 import com.empresa.ecommerce_backend.service.interfaces.PaymentService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.empresa.ecommerce_backend.dto.response.OrderSummaryResponse;
-import com.empresa.ecommerce_backend.dto.response.PageResponse;
-import com.empresa.ecommerce_backend.repository.projection.OrderSummaryProjection;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -96,10 +99,15 @@ public class OrderServiceImpl implements OrderService {
             if (v == null) {
                 return ServiceResult.error(HttpStatus.BAD_REQUEST, "Ítem inválido en el carrito (falta variante).");
             }
-            int stock = v.getStock() == null ? 0 : v.getStock();
+
             int qty = ci.getQuantity();
-            if (qty > stock) {
-                return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente para SKU " + v.getSku());
+
+            // ⬇️ Para FÍSICOS y DIGITALES INSTANT: validar y reservar stock
+            if (!isDigitalOnDemand(v)) {
+                int stock = (v.getStock() == null ? 0 : v.getStock());
+                if (qty > stock) {
+                    return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente para SKU " + v.getSku());
+                }
             }
 
             BigDecimal unitPrice = v.getPrice();
@@ -116,8 +124,15 @@ public class OrderServiceImpl implements OrderService {
             oi.setDiscountAmount(BigDecimal.ZERO);
             oi.setLineTotal(lineTotal);
 
-            // reservar stock
-            v.setStock(stock - qty);
+            // ⬇️ Reservar stock solo si NO es on-demand
+            if (!isDigitalOnDemand(v)) {
+                int stock = (v.getStock() == null ? 0 : v.getStock());
+                v.setStock(stock - qty);
+            } else {
+                // Si tenés campos en OrderItem para digitales, podés inicializarlos acá:
+                // oi.setDigitalDelivered(false);
+                // oi.setLicenseKey(null);
+            }
 
             order.getItems().add(oi);
             subTotal = subTotal.add(lineTotal);
@@ -129,6 +144,9 @@ public class OrderServiceImpl implements OrderService {
         order.setTaxAmount(BigDecimal.ZERO);
         order.setDiscountTotal(BigDecimal.ZERO);
         order.setTotalAmount(subTotal); // subtotal + 0 + 0 - 0
+
+        // ⏳ Expiración inicial genérica (hasta que elija método de pago)
+        order.setExpiresAt(LocalDateTime.now().plusMinutes(30));
 
         Order saved = orderRepo.save(order);
         return ServiceResult.created(orderMapper.toResponse(saved));
@@ -147,20 +165,29 @@ public class OrderServiceImpl implements OrderService {
     @Transactional(readOnly = true)
     public ServiceResult<PageResponse<OrderSummaryResponse>> listMineSummaries(Pageable pageable) {
         Long uid = currentUserId();
-        Page<OrderSummaryProjection> page = orderRepo.findSummariesByUserId(uid, pageable);
+
+        // 👇 ahora trae solo órdenes cuyo status != PENDING
+        Page<OrderSummaryProjection> page =
+                orderRepo.findSummariesByUserIdExcludingStatus(uid, OrderStatus.PENDING, pageable);
+
         Page<OrderSummaryResponse> mapped = page.map(orderMapper::toSummary);
         return ServiceResult.ok(PageResponse.of(mapped));
     }
+
+
 
     @Override
     @Transactional(readOnly = true)
     public ServiceResult<List<OrderResponse>> listMine() {
         Long uid = currentUserId();
-        var list = orderRepo.findAllByUserIdOrderByCreatedAtDesc(uid).stream()
+        var list = orderRepo
+                .findAllByUserIdAndStatusNotOrderByCreatedAtDesc(uid, OrderStatus.PENDING) // 👈 sin pendientes
+                .stream()
                 .map(orderMapper::toResponse)
                 .toList();
         return ServiceResult.ok(list);
     }
+
 
     // ====== PATCH Shipping ======
     @Override
@@ -212,7 +239,7 @@ public class OrderServiceImpl implements OrderService {
         if (o.getItems() == null || o.getItems().isEmpty()) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "La orden no tiene ítems.");
         }
-        if (o.getShippingAddress() == null) {
+        if (requiresShipping(o) && o.getShippingAddress() == null) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta la dirección de envío.");
         }
         if (o.getBillingInfo() == null) {
@@ -264,7 +291,7 @@ public class OrderServiceImpl implements OrderService {
         return ServiceResult.ok(orderMapper.toResponse(saved));
     }
 
-    // ====== PATCH Payment (ya lo tenías, lo mantengo con un par de ajustes menores) ======
+    // ====== PATCH Payment ======
     @Override
     @Transactional
     public ServiceResult<OrderResponse> patchPaymentMethod(Long orderId, UpdatePaymentMethodRequest req) {
@@ -280,9 +307,13 @@ public class OrderServiceImpl implements OrderService {
         if (o.getStatus() != OrderStatus.PENDING) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede cambiar el método de pago mientras la orden está PENDING.");
         }
-        // Si hay un Payment ya iniciado, hacer validaciones acá.
 
-        o.setChosenPaymentMethod(req.getPaymentMethod());
+        PaymentMethod method = req.getPaymentMethod();
+        o.setChosenPaymentMethod(method);
+
+        // ⏳ Ajustar expiración según el método de pago elegido
+        o.setExpiresAt(calculateExpirationFor(method));
+
         Order saved = orderRepo.save(o);
         return ServiceResult.ok(orderMapper.toResponse(saved));
     }
@@ -294,12 +325,11 @@ public class OrderServiceImpl implements OrderService {
                 .map(OrderItem::getLineTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal shippingCost = (o.getShippingAddress() != null)
+        BigDecimal shippingCost = requiresShipping(o) && o.getShippingAddress() != null
                 ? calcularEnvio(o.getShippingAddress())
                 : BigDecimal.ZERO;
 
         BigDecimal taxAmount = calcularImpuestos(subTotal, o.getBillingInfo());
-
         BigDecimal discountTotal = o.getDiscountTotal() != null ? o.getDiscountTotal() : BigDecimal.ZERO;
 
         BigDecimal total = subTotal.subtract(discountTotal).add(shippingCost).add(taxAmount);
@@ -320,5 +350,44 @@ public class OrderServiceImpl implements OrderService {
     private BigDecimal calcularImpuestos(BigDecimal subTotal, BillingSnapshot billing) {
         // TODO: calcular IVA según condición impositiva del billing
         return subTotal.multiply(new BigDecimal("0.00"));
+    }
+
+    private boolean isDigital(ProductVariant v) {
+        return v != null && v.getFulfillmentType() != null &&
+                (v.getFulfillmentType() == FulfillmentType.DIGITAL_ON_DEMAND
+                        || v.getFulfillmentType() == FulfillmentType.DIGITAL_INSTANT);
+    }
+
+    private boolean isDigitalOnDemand(ProductVariant v) {
+        return v != null && v.getFulfillmentType() == FulfillmentType.DIGITAL_ON_DEMAND;
+    }
+
+    private boolean requiresShipping(Order o) {
+        // requiere envío si existe al menos un ítem NO digital
+        return o.getItems().stream().anyMatch(oi -> {
+            ProductVariant v = oi.getVariant();
+            return !isDigital(v);
+        });
+    }
+
+    // ⏳ Helper para expiración por método de pago
+    private LocalDateTime calculateExpirationFor(PaymentMethod method) {
+
+        if (method == null) {
+            return LocalDateTime.now().plusMinutes(30);
+        }
+
+        return switch (method) {
+            case CARD ->
+                    LocalDateTime.now().plusHours(1); // pago inmediato
+            case MERCADO_PAGO ->
+                    LocalDateTime.now().plusMinutes(30); // preferencia MP rápida
+            case PAYPAL ->
+                    LocalDateTime.now().plusMinutes(45); // un poco más de margen
+            case CASH ->
+                    LocalDateTime.now().plusHours(24);   // efectivo
+            case BANK_TRANSFER ->
+                    LocalDateTime.now().plusHours(48);   // transferencia
+        };
     }
 }

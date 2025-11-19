@@ -34,6 +34,7 @@ public class CartServiceImpl implements CartService {
     private final ProductRepository productRepository;
     private final ProductVariantRepository variantRepository;
     private final CartMapper cartMapper;
+    private static final int DEFAULT_DIGITAL_LIMIT = 10;
 
     /* =================== ATTACH (fija guest => user) =================== */
     @Override
@@ -41,7 +42,7 @@ public class CartServiceImpl implements CartService {
     public ServiceResult<CartResponse> attachCartToUser(String sessionId, Long userId) {
         if (userId == null) throw new IllegalArgumentException("userId requerido");
 
-        var userCartOpt    = cartRepository.lockByUserId(userId);
+        var userCartOpt = cartRepository.lockByUserId(userId);
         var sessionCartOpt = (sessionId != null && !sessionId.isBlank())
                 ? cartRepository.lockBySessionId(sessionId) : Optional.<Cart>empty();
 
@@ -66,7 +67,8 @@ public class CartServiceImpl implements CartService {
 
             Cart myCart = userCartOpt.orElseGet(() -> {
                 Cart c = new Cart();
-                User u = new User(); u.setId(userId);
+                User u = new User();
+                u.setId(userId);
                 c.setUser(u);
                 c.setItems(new HashSet<>());
                 c.setSessionId(UUID.randomUUID().toString());
@@ -87,7 +89,8 @@ public class CartServiceImpl implements CartService {
         // B) No hay nada → crear carrito del usuario (cookie nueva)
         if (userCartOpt.isEmpty() && sessionCartOpt.isEmpty()) {
             Cart c = new Cart();
-            User u = new User(); u.setId(userId);
+            User u = new User();
+            u.setId(userId);
             c.setUser(u);
             c.setItems(new HashSet<>());
             c.setSessionId(UUID.randomUUID().toString());
@@ -114,7 +117,8 @@ public class CartServiceImpl implements CartService {
 
             if (sessionCart.getUser() == null) {
                 // ► ADOPCIÓN: fijamos el guest al usuario y (solo aquí) rotamos sessionId
-                User u = new User(); u.setId(userId);
+                User u = new User();
+                u.setId(userId);
                 sessionCart.setUser(u);
                 sessionCart.setSessionId(UUID.randomUUID().toString());
                 sessionCart.setUpdatedAt(LocalDateTime.now());
@@ -133,7 +137,8 @@ public class CartServiceImpl implements CartService {
                 }
                 // De otro owner (ya cubierto arriba), creamos uno propio por claridad
                 Cart c = new Cart();
-                User u = new User(); u.setId(userId);
+                User u = new User();
+                u.setId(userId);
                 c.setUser(u);
                 c.setItems(new HashSet<>());
                 c.setSessionId(UUID.randomUUID().toString());
@@ -164,9 +169,8 @@ public class CartServiceImpl implements CartService {
                 if (variant == null) continue;
 
                 var existingOpt = cartItemRepository.findByCartAndProductAndVariant(userCart, si.getProduct(), variant);
-                int stock = safeStock(variant.getStock());
                 int baseQty = existingOpt.map(CartItem::getQuantity).orElse(0);
-                int mergedQty = Math.min(baseQty + si.getQuantity(), stock);
+                int mergedQty = clampQty(variant, baseQty + si.getQuantity());
 
                 if (existingOpt.isEmpty()) {
                     if (mergedQty <= 0) continue;
@@ -225,7 +229,8 @@ public class CartServiceImpl implements CartService {
             }
             // Crear nuevo para el user (independiente de cookie)
             Cart c = new Cart();
-            User u = new User(); u.setId(userId);
+            User u = new User();
+            u.setId(userId);
             c.setUser(u);
             c.setItems(new HashSet<>());
             c.setSessionId(UUID.randomUUID().toString());
@@ -296,9 +301,15 @@ public class CartServiceImpl implements CartService {
         CartItem item = existing.orElse(null);
 
         int newQty = (item != null ? item.getQuantity() : 0) + dto.getQuantity();
-        int stock = safeStock(variant.getStock());
-        if (newQty > stock) {
-            return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + stock);
+        int limit = availableForCart(variant);
+
+        if (newQty > limit) {
+            if (ignoresStock(variant)) {
+                // Digital on demand: capear sin error
+                newQty = limit;
+            } else {
+                return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + limit);
+            }
         }
 
         if (item == null) {
@@ -335,14 +346,23 @@ public class CartServiceImpl implements CartService {
             cartItemRepository.delete(item);
         } else {
             ProductVariant v = item.getVariant();
+
             if (v == null) {
                 return ServiceResult.error(HttpStatus.CONFLICT, "Ítem inválido: falta la variante");
             }
-            int stock = safeStock(v.getStock());
-            if (dto.getQuantity() > stock) {
-                return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + stock);
+
+            int limit = availableForCart(v);
+            int desired = dto.getQuantity();
+
+            if (desired > limit) {
+                if (ignoresStock(v)) {
+                    // Digital on demand: capear
+                    desired = limit;
+                } else {
+                    return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + limit);
+                }
             }
-            item.setQuantity(dto.getQuantity());
+            item.setQuantity(desired);
         }
 
         cart.setUpdatedAt(LocalDateTime.now());
@@ -367,10 +387,16 @@ public class CartServiceImpl implements CartService {
         }
 
         int newQty = item.getQuantity() + 1;
-        int stock = safeStock(v.getStock());
-        if (newQty > stock) {
-            return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + stock);
+        int limit = availableForCart(v);
+        if (newQty > limit) {
+            if (ignoresStock(v)) {
+                newQty = limit; // capea callado
+            } else {
+                return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + limit);
+            }
         }
+        item.setQuantity(newQty);
+
 
         item.setQuantity(newQty);
         cart.setUpdatedAt(LocalDateTime.now());
@@ -441,7 +467,8 @@ public class CartServiceImpl implements CartService {
                     .orElseGet(() -> {
                         if (!createIfMissing) throw new EntityNotFoundException("Carrito no encontrado");
                         Cart c = new Cart();
-                        User u = new User(); u.setId(userId);
+                        User u = new User();
+                        u.setId(userId);
                         c.setUser(u);
                         c.setItems(new HashSet<>());
                         c.setSessionId(UUID.randomUUID().toString());
@@ -503,6 +530,28 @@ public class CartServiceImpl implements CartService {
             }
         }
         return null; // OK
+    }
+
+    private boolean ignoresStock(ProductVariant v) {
+        return v != null
+                && v.getFulfillmentType() != null
+                && v.getFulfillmentType().name().equals("DIGITAL_ON_DEMAND");
+        // Si usás enum: v.getFulfillmentType() == FulfillmentType.DIGITAL_ON_DEMAND
+    }
+
+    private int availableForCart(ProductVariant v) {
+        if (ignoresStock(v)) {
+            return (v.getMaxPerOrder() != null && v.getMaxPerOrder() > 0)
+                    ? v.getMaxPerOrder()
+                    : DEFAULT_DIGITAL_LIMIT;
+        }
+        return safeStock(v.getStock());
+    }
+
+
+    private int clampQty(ProductVariant v, int desired) {
+        int limit = availableForCart(v);
+        return Math.max(0, Math.min(desired, limit));
     }
 
     private int safeStock(Integer stock) {
