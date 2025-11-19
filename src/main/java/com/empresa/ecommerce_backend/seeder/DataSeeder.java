@@ -6,6 +6,7 @@ import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.repository.*;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import com.empresa.ecommerce_backend.enums.FulfillmentType;
 
 @Component
 @RequiredArgsConstructor
+@Profile("dev")
 public class DataSeeder {
 
     private final RoleRepository roleRepository;
