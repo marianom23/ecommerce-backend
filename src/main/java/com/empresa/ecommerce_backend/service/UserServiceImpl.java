@@ -7,6 +7,7 @@ import com.empresa.ecommerce_backend.dto.request.RegisterUserRequest;
 import com.empresa.ecommerce_backend.dto.response.LoginResponse;
 import com.empresa.ecommerce_backend.dto.response.RegisterUserResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.dto.response.UserMeResponse;
 import com.empresa.ecommerce_backend.enums.AuthProvider;
 import com.empresa.ecommerce_backend.enums.RoleName;
 import com.empresa.ecommerce_backend.events.UserRegisteredEvent;
@@ -15,19 +16,13 @@ import com.empresa.ecommerce_backend.model.Role;
 import com.empresa.ecommerce_backend.model.User;
 import com.empresa.ecommerce_backend.repository.RoleRepository;
 import com.empresa.ecommerce_backend.repository.UserRepository;
+import com.empresa.ecommerce_backend.security.AuthUser;
 import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import com.empresa.ecommerce_backend.service.interfaces.LoginAttemptService;
 import com.empresa.ecommerce_backend.service.interfaces.MailService;
 import com.empresa.ecommerce_backend.service.interfaces.UserService;
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.jwk.source.JWKSource;
-import com.nimbusds.jose.jwk.source.RemoteJWKSet;
-import com.nimbusds.jose.proc.JWSVerificationKeySelector;
-import com.nimbusds.jose.proc.SecurityContext;
-import com.nimbusds.jwt.JWTClaimsSet;
-import com.nimbusds.jwt.proc.ConfigurableJWTProcessor;
-import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -36,16 +31,19 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URL;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
@@ -63,7 +61,6 @@ public class UserServiceImpl implements UserService {
     /* =================== REGISTER =================== */
     @Transactional
     public ServiceResult<RegisterUserResponse> registerUser(RegisterUserRequest dto) {
-        // Validación “rápida” para feedback inmediato
         if (userRepository.existsByEmail(dto.getEmail())) {
             return ServiceResult.error(HttpStatus.CONFLICT, "El email ya está registrado.");
         }
@@ -80,15 +77,13 @@ public class UserServiceImpl implements UserService {
 
             User saved = userRepository.save(user);
 
-            // Generar token y publicar evento (el Listener lo enviará AFTER_COMMIT y en @Async)
             String token = jwtService.generateEmailVerificationToken(saved.getEmail());
             publisher.publishEvent(new UserRegisteredEvent(saved.getEmail(), token));
 
             RegisterUserResponse response = userMapper.toRegisterResponse(saved);
-            return ServiceResult.created(response); // 201 Created
+            return ServiceResult.created(response);
 
         } catch (DataIntegrityViolationException e) {
-            // Por si dos requests pasan el existsByEmail al mismo tiempo (índice único en BD)
             return ServiceResult.error(HttpStatus.CONFLICT, "El email ya está registrado.");
         }
     }
@@ -107,7 +102,6 @@ public class UserServiceImpl implements UserService {
 
         User user = optionalUser.get();
         if (user.isVerified()) {
-            // Idempotente: ya estaba verificada → 200 OK con mensaje
             return new ServiceResult<>("La cuenta ya estaba verificada.", null, HttpStatus.OK);
         }
 
@@ -122,14 +116,13 @@ public class UserServiceImpl implements UserService {
             Optional<User> optionalUser = userRepository.findByEmail(request.email());
 
             if (optionalUser.isEmpty()) {
-                // Evitar enumeración de usuarios
                 loginAttemptService.logAttempt(null, ip, false, "Usuario no encontrado.");
                 return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.");
             }
 
             User user = optionalUser.get();
 
-            // Si la cuenta es sólo OAuth (sin password local)
+            // Cuenta creada solo por OAuth (sin password local)
             if (user.getPassword() == null || user.getPassword().isBlank()) {
                 loginAttemptService.logAttempt(user, ip, false, "Sin contraseña (OAuth).");
                 return ServiceResult.error(
@@ -138,30 +131,18 @@ public class UserServiceImpl implements UserService {
                 );
             }
 
-            // ✅ Verificación real de contraseña
             if (!passwordEncoder.matches(request.password(), user.getPassword())) {
                 loginAttemptService.logAttempt(user, ip, false, "Credenciales inválidas.");
                 return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.");
             }
 
-            // (Opcional) Requerir email verificado
+            // Si quisieras exigir email verificado, lo descomentas:
             // if (!user.isVerified()) {
             //     loginAttemptService.logAttempt(user, ip, false, "Email no verificado.");
             //     return ServiceResult.error(HttpStatus.FORBIDDEN, "Debes verificar tu email.");
             // }
 
-            // Construir Authentication con authorities prefijadas para hasRole("...")
-            Authentication authentication = new UsernamePasswordAuthenticationToken(
-                    user.getId().toString(), // subject = ID (como venías usando)
-                    null,
-                    user.getRoles().stream()
-                            .map(role -> new SimpleGrantedAuthority(
-                                    role.getName().name().startsWith("ROLE_")
-                                            ? role.getName().name()
-                                            : "ROLE_" + role.getName().name()
-                            ))
-                            .collect(Collectors.toList())
-            );
+            Authentication authentication = buildAuthenticationFromUser(user);
 
             loginAttemptService.logAttempt(user, ip, true, null);
 
@@ -186,86 +167,78 @@ public class UserServiceImpl implements UserService {
     }
 
 
-    /* =================== OAUTH CALLBACK =================== */
-    public ServiceResult<LoginResponse> handleOAuthCallback(OAuthCallbackRequest dto, String ip) {
+    /* -------- Perfil (/api/me) -------- */
+    public ServiceResult<UserMeResponse> getProfile(Authentication authentication) {
         try {
-            System.out.println("OAUTH_CALLBACK dto = " + dto);
+            log.info("🔎 /me -> authentication = {}, principal = {}",
+                    authentication,
+                    authentication != null ? authentication.getPrincipal().getClass().getName() : "null");
 
-            boolean valid = jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider());
-            System.out.println("verifyIdToken = " + valid);
+            User user = getUserFromAuthentication(authentication);
+            UserMeResponse dto = userMapper.toMeResponse(user); // o toUserMeResponse, según tu mapper
+            return ServiceResult.ok(dto);
 
-            if (!valid) {
-                System.out.println("ID TOKEN INVALIDO");
-                loginAttemptService.logAttempt(null, ip, false, "ID token inválido");
-                return ServiceResult.error(HttpStatus.UNAUTHORIZED, "ID token inválido");
-            }
-
-            String oauthId = jwtService.extractSub(dto.getIdToken(), dto.getProvider());
-            System.out.println("oauthId = " + oauthId);
-
-            User user = userRepository.findByOauthId(oauthId).orElseGet(() -> {
-                System.out.println("No existe usuario, creando nuevo...");
-                Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
-                        .orElseThrow(() -> new RuntimeException("Rol CUSTOMER no encontrado"));
-                User nuevo = userMapper.fromOAuthDto(dto);
-                nuevo.setOauthId(oauthId);
-                nuevo.setVerified(true);
-                nuevo.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
-                nuevo.setRoles(Set.of(customerRole));
-                return userRepository.save(nuevo);
-            });
-
-            System.out.println("USER FINAL ID = " + user.getId());
-
-            // 4) Normalizaciones (verified/proveedor/nombres si vienen)
-            boolean dirty = false;
-            if (!user.isVerified()) { user.setVerified(true); dirty = true; }
-            if (user.getAuthProvider() == null) {
-                user.setAuthProvider(AuthProvider.valueOf(dto.getProvider().toUpperCase().replace("-", "_")));
-                dirty = true;
-            }
-            if (dto.getFirstName() != null && !dto.getFirstName().isBlank() && !dto.getFirstName().equals(user.getFirstName())) {
-                user.setFirstName(dto.getFirstName()); dirty = true;
-            }
-            if (dto.getLastName() != null && !dto.getLastName().isBlank() && !dto.getLastName().equals(user.getLastName())) {
-                user.setLastName(dto.getLastName()); dirty = true;
-            }
-            if (dto.getEmail() != null && !dto.getEmail().isBlank() && !dto.getEmail().equals(user.getEmail())) {
-                user.setEmail(dto.getEmail()); dirty = true;
-            }
-            if (dirty) userRepository.save(user);
-
-            // 5) Construir Authentication con prefijo ROLE_ (igual que en login)
-            Authentication auth = new UsernamePasswordAuthenticationToken(
-                    user.getId().toString(),
-                    null,
-                    user.getRoles().stream()
-                            .map(role -> new SimpleGrantedAuthority(
-                                    role.getName().name().startsWith("ROLE_")
-                                            ? role.getName().name()
-                                            : "ROLE_" + role.getName().name()
-                            ))
-                            .collect(Collectors.toList())
-            );
-
-            // 6) Generar JWT + expiración (igual que login)
-            String jwt = jwtService.generateToken(auth, user.getId());
-            Instant expiresAt = jwtService.getExpiration(jwt);
-
-            loginAttemptService.logAttempt(user, ip, true, null);
-
-            // 7) Armar el MISMO DTO de respuesta que /login
-            LoginResponse loginResponse = userMapper.toLoginResponse(user, jwt, expiresAt);
-
-            return ServiceResult.ok(loginResponse);
-
+        } catch (UsernameNotFoundException e) {
+            return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Usuario no autenticado");
         } catch (Exception e) {
-            loginAttemptService.logAttempt(null, ip, false, "Error al verificar ID token");
-            return ServiceResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error al verificar ID token");
+            log.error("Error en getProfile", e);
+            return ServiceResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error al obtener el perfil");
         }
+    }
+
+    private User getUserFromAuthentication(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new UsernameNotFoundException("No autenticado");
+        }
+
+        Object principal = authentication.getPrincipal();
+
+        // ✅ CASO 1: principal = AuthUser (lo que muestran tus logs)
+        if (principal instanceof AuthUser authUser) {
+            Long id = authUser.getId();
+            return userRepository.findById(id)
+                    .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+        }
+
+        // ✅ CASO 2: por si en algún flujo el principal es solo el id (Long)
+        if (principal instanceof Long l) {
+            return userRepository.findById(l)
+                    .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+        }
+
+        // ✅ CASO 3: por si el principal es el id en String ("2", "3", etc.)
+        if (principal instanceof String s) {
+            try {
+                Long id = Long.parseLong(s);
+                return userRepository.findById(id)
+                        .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
+            } catch (NumberFormatException e) {
+                throw new UsernameNotFoundException("Principal inválido");
+            }
+        }
+
+        // ❌ Cualquier otra cosa, no sabemos resolverla
+        throw new UsernameNotFoundException(
+                "Tipo de principal no soportado: " + principal.getClass().getName()
+        );
     }
 
 
 
 
+    /* =================== HELPERS =================== */
+
+    private Authentication buildAuthenticationFromUser(User user) {
+        return new UsernamePasswordAuthenticationToken(
+                user.getId().toString(),
+                null,
+                user.getRoles().stream()
+                        .map(role -> new SimpleGrantedAuthority(
+                                role.getName().name().startsWith("ROLE_")
+                                        ? role.getName().name()
+                                        : "ROLE_" + role.getName().name()
+                        ))
+                        .collect(Collectors.toList())
+        );
+    }
 }

@@ -4,16 +4,15 @@ import com.empresa.ecommerce_backend.dto.request.OAuthCallbackRequest;
 import com.empresa.ecommerce_backend.dto.request.RegisterUserRequest;
 import com.empresa.ecommerce_backend.dto.response.LoginResponse;
 import com.empresa.ecommerce_backend.dto.response.RegisterUserResponse;
+import com.empresa.ecommerce_backend.dto.response.UserMeResponse;   // 👈 NUEVO
 import com.empresa.ecommerce_backend.enums.AuthProvider;
 import com.empresa.ecommerce_backend.model.User;
 import org.mapstruct.*;
-
-import java.time.Instant;
 import java.util.stream.Collectors;
+import java.time.Instant;
 
 @Mapper(componentModel = "spring")
 public interface UserMapper {
-
     /* ========= Register ========= */
 
     @BeanMapping(ignoreByDefault = true)
@@ -46,11 +45,14 @@ public interface UserMapper {
             @Mapping(source = "user.firstName",  target = "firstName"),
             @Mapping(source = "user.lastName",   target = "lastName"),
             @Mapping(source = "user.verified",   target = "verified"),
-            @Mapping(target = "provider",
-                    expression = "java(user.getAuthProvider()!=null ? user.getAuthProvider().name() : \"LOCAL\")"),
+            @Mapping(
+                    target = "provider",
+                    expression = "java(user.getAuthProvider()!=null ? user.getAuthProvider().name() : \"LOCAL\")"
+            ),
             @Mapping(
                     target = "roles",
-                    expression = "java(user.getRoles().stream().map(r -> r.getName().name()).toList())"),
+                    expression = "java(user.getRoles().stream().map(r -> r.getName().name()).toList())"
+            ),
             @Mapping(target = "fullName", ignore = true)
     })
     LoginResponse toLoginResponse(User user, String token, Instant expiresAt);
@@ -82,4 +84,22 @@ public interface UserMapper {
             default         -> AuthProvider.LOCAL;
         };
     }
+
+    /* ========= /b/me ========= */
+
+    @Mappings({
+            @Mapping(source = "id",        target = "id"),
+            @Mapping(source = "email",     target = "email"),
+            @Mapping(source = "firstName", target = "firstName"),
+            @Mapping(source = "lastName",  target = "lastName"),
+            @Mapping(source = "verified",  target = "verified"),
+            @Mapping(
+                    target = "roles",
+                    expression = "java(user.getRoles().stream()" +
+                            ".map(r -> r.getName().name())" +
+                            ".collect(java.util.stream.Collectors.toSet()))"
+            )
+    })
+    UserMeResponse toMeResponse(User user);
+
 }

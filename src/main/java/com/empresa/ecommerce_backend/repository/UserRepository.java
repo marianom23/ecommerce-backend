@@ -11,6 +11,7 @@ public interface UserRepository extends BaseRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    @EntityGraph(attributePaths = "roles")
     Optional<User> findByOauthId(String oauthId);
 
     boolean existsByEmail(String email);

@@ -1,4 +1,3 @@
-// src/main/java/com/empresa/ecommerce_backend/dto/response/ServiceResult.java
 package com.empresa.ecommerce_backend.dto.response;
 
 import lombok.AllArgsConstructor;
@@ -27,5 +26,15 @@ public class ServiceResult<T> {
     }
     public static <T> ServiceResult<T> error(HttpStatus st, String msg, T data) {
         return new ServiceResult<>(msg, data, st);
+    }
+
+    // 👇 NUEVO: helper para saber si fue exitoso
+    public boolean isSuccess() {
+        return status != null && status.is2xxSuccessful();
+    }
+
+    // 👇 NUEVO: alias para data, para que el código que usa getBody() compile
+    public T getBody() {
+        return data;
     }
 }

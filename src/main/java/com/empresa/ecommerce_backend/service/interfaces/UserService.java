@@ -15,6 +15,5 @@ public interface UserService {
 
     ServiceResult<LoginResponse> login(LoginRequest request, String ip);
 
-    ServiceResult<LoginResponse> handleOAuthCallback(OAuthCallbackRequest dto, String ip);
 
 }

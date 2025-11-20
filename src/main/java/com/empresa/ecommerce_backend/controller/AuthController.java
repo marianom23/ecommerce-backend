@@ -7,12 +7,16 @@ import com.empresa.ecommerce_backend.dto.request.RegisterUserRequest;
 import com.empresa.ecommerce_backend.dto.response.LoginResponse;
 import com.empresa.ecommerce_backend.dto.response.RegisterUserResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.dto.response.UserMeResponse;
+import com.empresa.ecommerce_backend.service.OAuth2UserProcessor;
 import com.empresa.ecommerce_backend.service.UserServiceImpl;
 import com.empresa.ecommerce_backend.web.CartCookieManager;
+import com.empresa.ecommerce_backend.web.AuthCookieManager;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -21,7 +25,9 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final UserServiceImpl userServiceImpl;
-    private final CartCookieManager cookieManager; // solo para /logout
+    private final CartCookieManager cartCookieManager;
+    private final OAuth2UserProcessor oAuth2UserProcessor;
+    private final AuthCookieManager authCookieManager;
 
     /* -------- Registro -------- */
     @PostMapping("/register")
@@ -35,41 +41,61 @@ public class AuthController {
         return userServiceImpl.verifyEmail(token);
     }
 
-    /* -------- Login -------- */
+    /* -------- Login (credenciales) -------- */
     @PostMapping("/login")
-    public ServiceResult<?> login(
+    public ServiceResult<LoginResponse> login(
             @Valid @RequestBody LoginRequest request,
-            HttpServletRequest servletRequest
+            HttpServletRequest servletRequest,
+            HttpServletResponse response
     ) {
         String ip = extractClientIp(servletRequest);
-        return userServiceImpl.login(request, ip);
+        ServiceResult<LoginResponse> result = userServiceImpl.login(request, ip);
+
+        // Si el login fue exitoso, setear cookie httpOnly con el JWT
+        if (result.getData() != null
+                && result.getStatus() != null
+                && result.getStatus().is2xxSuccessful()) {
+            String token = result.getData().getToken();
+            authCookieManager.setAuthCookie(response, token, servletRequest.isSecure());
+        }
+
+        return result;
     }
 
-    /* -------- Callback OAuth2 -------- */
+    /* -------- Callback OAuth2 (flujo id_token desde el front) -------- */
     @PostMapping("/oauth2/callback")
     public ServiceResult<LoginResponse> handleOAuthCallback(
             @RequestBody OAuthCallbackRequest dto,
-            HttpServletRequest servletRequest
+            HttpServletRequest servletRequest,
+            HttpServletResponse response
     ) {
         String ip = extractClientIp(servletRequest);
-        // sin lógica de carrito aquí
-        return userServiceImpl.handleOAuthCallback(dto, ip);
+        ServiceResult<LoginResponse> result =
+                oAuth2UserProcessor.processFromFrontendOAuthCallback(dto, ip);
+
+        // También acá seteamos cookie si todo salió bien
+        if (result.getData() != null
+                && result.getStatus() != null
+                && result.getStatus().is2xxSuccessful()) {
+            String token = result.getData().getToken();
+            authCookieManager.setAuthCookie(response, token, servletRequest.isSecure());
+        }
+
+        return result;
     }
 
     /* -------- Perfil -------- */
     @GetMapping("/me")
-    public Object getProfile(
-            @org.springframework.security.core.annotation.AuthenticationPrincipal
-            org.springframework.security.core.userdetails.UserDetails userDetails
-    ) {
-        return userDetails;
+    public ServiceResult<UserMeResponse> getProfile(Authentication authentication) {
+        return userServiceImpl.getProfile(authentication);
     }
 
     /* -------- Logout -------- */
     @PostMapping("/logout")
     public ServiceResult<Void> logout(HttpServletRequest request, HttpServletResponse response) {
-        // borrar cookie cart_session
-        cookieManager.clearSessionCookie(response, request.isSecure());
+        // Limpiamos carrito + auth
+        cartCookieManager.clearSessionCookie(response, request.isSecure());
+        authCookieManager.clearAuthCookie(response, request.isSecure());
         return ServiceResult.noContent(); // 204
     }
 

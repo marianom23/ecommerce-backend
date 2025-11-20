@@ -9,7 +9,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.*;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Service;
-
+import com.nimbusds.jwt.SignedJWT;
+import java.text.ParseException;
 import javax.crypto.SecretKey;
 import java.time.Instant;
 import java.util.*;
@@ -54,6 +55,64 @@ public class JwtServiceImpl implements JwtService {
 
     @Value("${AZURE_AD_TENANT_ID}")
     private String azureTenantId;
+
+    public Map<String, Object> extractClaims(String idToken) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(idToken);
+            return jwt.getJWTClaimsSet().getClaims();
+        } catch (Exception e) {
+            return Map.of();
+        }
+    }
+
+    public String extractEmail(String idToken) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(idToken);
+            return jwt.getJWTClaimsSet().getStringClaim("email");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public String extractFirstName(String idToken) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(idToken);
+
+            // Google: given_name
+            // Azure AD: name (a veces), given_name
+            String given = jwt.getJWTClaimsSet().getStringClaim("given_name");
+            if (given != null && !given.isBlank()) return given;
+
+            String name = jwt.getJWTClaimsSet().getStringClaim("name");
+            if (name != null && name.contains(" ")) return name.split(" ")[0];
+
+            return null;
+
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public String extractLastName(String idToken) {
+        try {
+            SignedJWT jwt = SignedJWT.parse(idToken);
+
+            // Google: family_name
+            // Azure AD: name (a veces), family_name
+            String family = jwt.getJWTClaimsSet().getStringClaim("family_name");
+            if (family != null && !family.isBlank()) return family;
+
+            String name = jwt.getJWTClaimsSet().getStringClaim("name");
+            if (name != null && name.contains(" ")) {
+                return String.join(" ", Arrays.copyOfRange(name.split(" "), 1, name.split(" ").length));
+            }
+
+            return null;
+
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     @Override
     public String generateToken(Authentication authentication, Long userId) {
