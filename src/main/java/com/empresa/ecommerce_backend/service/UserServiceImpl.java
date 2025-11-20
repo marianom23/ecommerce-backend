@@ -189,24 +189,24 @@ public class UserServiceImpl implements UserService {
     /* =================== OAUTH CALLBACK =================== */
     public ServiceResult<LoginResponse> handleOAuthCallback(OAuthCallbackRequest dto, String ip) {
         try {
-            // 1) Validar id_token del proveedor
-            if (!jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider())) {
+            System.out.println("OAUTH_CALLBACK dto = " + dto);
+
+            boolean valid = jwtService.verifyIdToken(dto.getIdToken(), dto.getProvider());
+            System.out.println("verifyIdToken = " + valid);
+
+            if (!valid) {
+                System.out.println("ID TOKEN INVALIDO");
                 loginAttemptService.logAttempt(null, ip, false, "ID token inválido");
                 return ServiceResult.error(HttpStatus.UNAUTHORIZED, "ID token inválido");
             }
 
-            // 2) Extraer "sub" (oauthId) del id_token
             String oauthId = jwtService.extractSub(dto.getIdToken(), dto.getProvider());
-            if (oauthId == null) {
-                loginAttemptService.logAttempt(null, ip, false, "No se pudo extraer el sub");
-                return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Token inválido");
-            }
+            System.out.println("oauthId = " + oauthId);
 
-            // 3) Buscar (o crear) usuario por oauthId
             User user = userRepository.findByOauthId(oauthId).orElseGet(() -> {
+                System.out.println("No existe usuario, creando nuevo...");
                 Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
                         .orElseThrow(() -> new RuntimeException("Rol CUSTOMER no encontrado"));
-
                 User nuevo = userMapper.fromOAuthDto(dto);
                 nuevo.setOauthId(oauthId);
                 nuevo.setVerified(true);
@@ -214,6 +214,8 @@ public class UserServiceImpl implements UserService {
                 nuevo.setRoles(Set.of(customerRole));
                 return userRepository.save(nuevo);
             });
+
+            System.out.println("USER FINAL ID = " + user.getId());
 
             // 4) Normalizaciones (verified/proveedor/nombres si vienen)
             boolean dirty = false;
