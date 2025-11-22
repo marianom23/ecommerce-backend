@@ -2,6 +2,8 @@ package com.empresa.ecommerce_backend.seeder;
 
 import com.empresa.ecommerce_backend.enums.AuthProvider;
 import com.empresa.ecommerce_backend.enums.RoleName;
+import com.empresa.ecommerce_backend.enums.FulfillmentType;
+import com.empresa.ecommerce_backend.enums.BannerPlacement;
 import com.empresa.ecommerce_backend.model.*;
 import com.empresa.ecommerce_backend.repository.*;
 import jakarta.annotation.PostConstruct;
@@ -11,8 +13,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Set;
-import com.empresa.ecommerce_backend.enums.FulfillmentType;
+
 
 @Component
 @RequiredArgsConstructor
@@ -24,9 +27,9 @@ public class DataSeeder {
     private final BrandRepository brandRepository;
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
-
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
+    private final BannerRepository bannerRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -37,10 +40,12 @@ public class DataSeeder {
         seedBrands();
         seedCategories();
         seedSuppliers();
-        seedProductsAndVariants();       // físicos demo
-        seedDigitalOnDemandProducts();   // digitales on demand (marcados con "(digital)")
+        seedBanners();                 // Banners demo
+        seedProductsAndVariants();     // Productos físicos demo
+        seedDigitalOnDemandProducts(); // Productos digitales demo
     }
 
+    /* =================== ROLES / ADMIN =================== */
 
     private void seedRoles() {
         for (RoleName roleName : RoleName.values()) {
@@ -68,6 +73,8 @@ public class DataSeeder {
             userRepository.save(admin);
         }
     }
+
+    /* =================== MARCAS / CATEGORÍAS / PROVEEDORES =================== */
 
     private void seedBrands() {
         createBrandIfNotExists("Genérica", "https://example.com/logo-generica.png");
@@ -115,8 +122,130 @@ public class DataSeeder {
         });
     }
 
+    /* =================== BANNERS HOME (TECNOLOGÍA, FOTOS REALES) =================== */
+
+    private void seedBanners() {
+        if (bannerRepository.count() > 0) {
+            return;
+        }
+
+        // HERO principal izquierda — Auriculares Sony
+        Banner heroMain = new Banner();
+        heroMain.setPlacement(BannerPlacement.HOME_HERO_MAIN);
+        heroMain.setTitle("Sony WH-1000XM5");
+        heroMain.setSubtitle("Noise Cancelling Headphones");
+        heroMain.setDescription("Los mejores auriculares con cancelación activa para una inmersión total en tu música.");
+        heroMain.setImageUrl("https://images.unsplash.com/photo-1580894908361-967232db2e56?auto=format&fit=crop&w=1600&q=80");
+        heroMain.setCtaText("Comprar ahora");
+        heroMain.setCtaUrl("/products/sony-wh-1000xm5");
+        heroMain.setPrice(BigDecimal.valueOf(399.99));
+        heroMain.setOldPrice(BigDecimal.valueOf(499.99));
+        heroMain.setDiscountPercent(20);
+        heroMain.setSortOrder(1);
+        heroMain.setActive(true);
+        bannerRepository.save(heroMain);
+
+        // Tarjeta lateral arriba — iPhone
+        Banner heroSideTop = new Banner();
+        heroSideTop.setPlacement(BannerPlacement.HOME_HERO_SIDE_TOP);
+        heroSideTop.setTitle("iPhone 15 Pro");
+        heroSideTop.setSubtitle("Titanium Performance");
+        heroSideTop.setDescription("El smartphone más avanzado, con el mejor rendimiento y cámara profesional.");
+        heroSideTop.setImageUrl("https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=800&q=80");
+        heroSideTop.setCtaText("Ver más");
+        heroSideTop.setCtaUrl("/products/iphone-15-pro");
+        heroSideTop.setPrice(BigDecimal.valueOf(1199.99));
+        heroSideTop.setOldPrice(BigDecimal.valueOf(1299.99));
+        heroSideTop.setDiscountPercent(8);
+        heroSideTop.setSortOrder(1);
+        heroSideTop.setActive(true);
+        bannerRepository.save(heroSideTop);
+
+        // Tarjeta lateral abajo — Headset gaming
+        Banner heroSideBottom = new Banner();
+        heroSideBottom.setPlacement(BannerPlacement.HOME_HERO_SIDE_BOTTOM);
+        heroSideBottom.setTitle("Headset Gaming Pro");
+        heroSideBottom.setSubtitle("7.1 Surround");
+        heroSideBottom.setDescription("Sonido envolvente, micrófono con cancelación de ruido y diseño ergonómico.");
+        heroSideBottom.setImageUrl("https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?auto=format&fit=crop&w=800&q=80");
+        heroSideBottom.setCtaText("Descubrir");
+        heroSideBottom.setCtaUrl("/products/gaming-headset-pro");
+        heroSideBottom.setPrice(BigDecimal.valueOf(129.00));
+        heroSideBottom.setOldPrice(BigDecimal.valueOf(179.00));
+        heroSideBottom.setDiscountPercent(28);
+        heroSideBottom.setSortOrder(1);
+        heroSideBottom.setActive(true);
+        bannerRepository.save(heroSideBottom);
+
+        // Banner promo top — MacBook / setup
+        Banner promoTop = new Banner();
+        promoTop.setPlacement(BannerPlacement.HOME_PROMO_TOP);
+        promoTop.setTitle("MacBook Pro M3");
+        promoTop.setSubtitle("Potencia para profesionales");
+        promoTop.setDescription("Ideal para desarrollo, edición de video y diseño 3D.");
+        promoTop.setImageUrl("https://images.unsplash.com/photo-1517336714731-489689fd1ca8?auto=format&fit=crop&w=1600&q=80");
+        promoTop.setCtaText("Ver MacBooks");
+        promoTop.setCtaUrl("/category/macbook");
+        promoTop.setPrice(BigDecimal.valueOf(2399.00));
+        promoTop.setOldPrice(BigDecimal.valueOf(2599.00));
+        promoTop.setDiscountPercent(8);
+        promoTop.setSortOrder(1);
+        promoTop.setActive(true);
+        bannerRepository.save(promoTop);
+
+        // Promo bottom left — Smartwatch
+        Banner promoBottomLeft = new Banner();
+        promoBottomLeft.setPlacement(BannerPlacement.HOME_PROMO_BOTTOM_LEFT);
+        promoBottomLeft.setTitle("Galaxy Watch 6");
+        promoBottomLeft.setSubtitle("Tu salud en tu muñeca");
+        promoBottomLeft.setDescription("Seguimiento avanzado de actividad, sueño y ritmo cardíaco.");
+        promoBottomLeft.setImageUrl("https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=800&q=80");
+        promoBottomLeft.setCtaText("Ver smartwatches");
+        promoBottomLeft.setCtaUrl("/category/smartwatch");
+        promoBottomLeft.setPrice(BigDecimal.valueOf(299.00));
+        promoBottomLeft.setOldPrice(BigDecimal.valueOf(349.00));
+        promoBottomLeft.setDiscountPercent(15);
+        promoBottomLeft.setSortOrder(1);
+        promoBottomLeft.setActive(true);
+        bannerRepository.save(promoBottomLeft);
+
+        // Promo bottom right — Parlante JBL
+        Banner promoBottomRight = new Banner();
+        promoBottomRight.setPlacement(BannerPlacement.HOME_PROMO_BOTTOM_RIGHT);
+        promoBottomRight.setTitle("JBL Charge 5");
+        promoBottomRight.setSubtitle("Sonido donde vayas");
+        promoBottomRight.setDescription("Batería de hasta 20 horas, resistente al agua y con graves potentes.");
+        promoBottomRight.setImageUrl("https://images.unsplash.com/photo-1552914953-938eef1e54b6?auto=format&fit=crop&w=800&q=80");
+        promoBottomRight.setCtaText("Comprar");
+        promoBottomRight.setCtaUrl("/products/jbl-charge-5");
+        promoBottomRight.setPrice(BigDecimal.valueOf(149.99));
+        promoBottomRight.setOldPrice(BigDecimal.valueOf(199.99));
+        promoBottomRight.setDiscountPercent(25);
+        promoBottomRight.setSortOrder(1);
+        promoBottomRight.setActive(true);
+        bannerRepository.save(promoBottomRight);
+
+        // Banner con countdown — Mega oferta 48hs
+        Banner countdown = new Banner();
+        countdown.setPlacement(BannerPlacement.HOME_COUNTDOWN);
+        countdown.setTitle("Mega Oferta 48hs");
+        countdown.setSubtitle("Tecnología seleccionada");
+        countdown.setDescription("Descuentos especiales en notebooks, monitores y accesorios.");
+        countdown.setImageUrl("https://images.unsplash.com/photo-1587825140708-dfaf72ae4b02?auto=format&fit=crop&w=1600&q=80");
+        countdown.setCtaText("Ver ofertas");
+        countdown.setCtaUrl("/offers/flash");
+        countdown.setPrice(null);
+        countdown.setOldPrice(null);
+        countdown.setDiscountPercent(null);
+        countdown.setCountdownUntil(LocalDateTime.now().plusHours(48));
+        countdown.setSortOrder(1);
+        countdown.setActive(true);
+        bannerRepository.save(countdown);
+    }
+
+    /* =================== PRODUCTOS DIGITALES =================== */
+
     private void seedDigitalOnDemandProducts() {
-        // Evitá duplicar si ya corriste el seeder antes (chequeo rápido por SKU prefix)
         final String skuPrefix = "DIG-ONDEM-";
 
         Category defaultCategory = categoryRepository.findById(1L).orElseThrow();
@@ -126,11 +255,10 @@ public class DataSeeder {
             Product product = new Product();
             product.setName("Licencia Software Pro " + i + " (digital)");
             product.setDescription("Clave digital bajo demanda. Recibirás tu key por email dentro de 1–12 horas.");
-            product.setSku("SKU-DIG-" + String.format("%03d", i)); // SKU base opcional
+            product.setSku("SKU-DIG-" + String.format("%03d", i));
             product.setCategory(defaultCategory);
             product.setBrand(defaultBrand);
 
-            // Imagen genérica
             ProductImage img = new ProductImage();
             img.setProduct(product);
             img.setUrl("https://picsum.photos/seed/digital-" + i + "/1200/800");
@@ -140,18 +268,16 @@ public class DataSeeder {
 
             Product saved = productRepository.save(product);
 
-            // Variante DIGITAL_ON_DEMAND (stock ignorado; dimensiones/peso nulo)
             ProductVariant v = new ProductVariant();
             v.setProduct(saved);
             v.setSku(skuPrefix + String.format("%03d", i));
-            v.setPrice(BigDecimal.valueOf(1500 + (i * 10)));  // precio demo
-            v.setStock(0);                                     // no aplica, pero lo dejamos en 0
+            v.setPrice(BigDecimal.valueOf(1500 + (i * 10)));
+            v.setStock(0);
             v.setFulfillmentType(FulfillmentType.DIGITAL_ON_DEMAND);
             v.setLeadTimeMinHours(1);
             v.setLeadTimeMaxHours(12);
             v.setAttributesJson("{\"plataforma\":\"PC\",\"region\":\"Global\"}");
 
-            // Para digitales: logística no aplica → dejá null
             v.setWeightKg(null);
             v.setLengthCm(null);
             v.setWidthCm(null);
@@ -161,6 +287,7 @@ public class DataSeeder {
         }
     }
 
+    /* =================== PRODUCTOS FÍSICOS DEMO =================== */
 
     /**
      * Crea 50 productos (solo catálogo) y genera variantes:
@@ -177,11 +304,10 @@ public class DataSeeder {
             Product product = new Product();
             product.setName("Producto de prueba " + i);
             product.setDescription("Descripción del producto " + i);
-            product.setSku("SKU-" + String.format("%03d", i)); // SKU base opcional
+            product.setSku("SKU-" + String.format("%03d", i));
             product.setCategory(defaultCategory);
             product.setBrand(defaultBrand);
 
-            // Imagen general del producto
             ProductImage img = new ProductImage();
             img.setProduct(product);
             img.setUrl("https://picsum.photos/seed/product-" + i + "/1200/800");
@@ -189,24 +315,20 @@ public class DataSeeder {
             img.setPosition(1);
             product.getImages().add(img);
 
-            // Guarda el producto primero (cascade para imágenes)
             Product savedProduct = productRepository.save(product);
 
-            // ---------- Variante por defecto ----------
             ProductVariant v1 = new ProductVariant();
             v1.setProduct(savedProduct);
             v1.setSku(savedProduct.getSku() + "-DEFAULT");
-            v1.setPrice(BigDecimal.valueOf(100.0 + i));           // precio demo
-            v1.setStock((i % 3 == 0) ? 0 : 10);                   // algunos sin stock
+            v1.setPrice(BigDecimal.valueOf(100.0 + i));
+            v1.setStock((i % 3 == 0) ? 0 : 10);
             v1.setAttributesJson("{}");
-            // logística en la VARIANTE
             v1.setWeightKg(BigDecimal.valueOf(1.25));
             v1.setLengthCm(BigDecimal.valueOf(25.0));
             v1.setWidthCm(BigDecimal.valueOf(15.0));
             v1.setHeightCm(BigDecimal.valueOf(10.0));
             productVariantRepository.save(v1);
 
-            // ---------- Segunda variante (para la mitad) ----------
             if (i % 2 == 0) {
                 ProductVariant v2 = new ProductVariant();
                 v2.setProduct(savedProduct);
@@ -214,7 +336,6 @@ public class DataSeeder {
                 v2.setPrice(BigDecimal.valueOf(110.0 + i));
                 v2.setStock(5);
                 v2.setAttributesJson("{\"color\":\"Rojo\",\"talle\":\"M\"}");
-                // logística distinta para probar
                 v2.setWeightKg(BigDecimal.valueOf(1.40));
                 v2.setLengthCm(BigDecimal.valueOf(27.0));
                 v2.setWidthCm(BigDecimal.valueOf(17.0));
@@ -224,3 +345,4 @@ public class DataSeeder {
         }
     }
 }
+

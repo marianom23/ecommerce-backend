@@ -1,12 +1,15 @@
-// repository/BannerRepository.java
+// src/main/java/com/empresa/ecommerce_backend/repository/BannerRepository.java
 package com.empresa.ecommerce_backend.repository;
 
-import java.time.LocalDateTime;
+import com.empresa.ecommerce_backend.model.Banner;
+import com.empresa.ecommerce_backend.enums.BannerPlacement;
+import org.springframework.data.jpa.repository.JpaRepository;
+
 import java.util.List;
 
-import com.empresa.ecommerce_backend.model.Banner;
+public interface BannerRepository extends JpaRepository<Banner, Long> {
 
-public interface BannerRepository extends BaseRepository<Banner, Long> {
-    List<Banner> findByActiveTrueOrderByPositionAsc();
-    List<Banner> findByStartAtBeforeAndEndAtAfter(LocalDateTime now1, LocalDateTime now2);
+    List<Banner> findByPlacementAndActiveTrueOrderBySortOrderAsc(BannerPlacement placement);
+
+    List<Banner> findByActiveTrueOrderByPlacementAscSortOrderAsc();
 }

@@ -1,6 +1,7 @@
 // src/main/java/com/empresa/ecommerce_backend/service/impl/CartServiceImpl.java
 package com.empresa.ecommerce_backend.service;
 
+import com.empresa.ecommerce_backend.repository.UserRepository;
 import com.empresa.ecommerce_backend.dto.request.AddItemRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateQtyRequest;
 import com.empresa.ecommerce_backend.dto.response.CartResponse;
@@ -29,6 +30,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CartServiceImpl implements CartService {
 
+    private final UserRepository userRepository;
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final ProductRepository productRepository;
@@ -41,6 +43,13 @@ public class CartServiceImpl implements CartService {
     @Transactional
     public ServiceResult<CartResponse> attachCartToUser(String sessionId, Long userId) {
         if (userId == null) throw new IllegalArgumentException("userId requerido");
+
+        if (!userExists(userId)) {
+            return ServiceResult.error(
+                    HttpStatus.UNAUTHORIZED,
+                    "Sesión inválida. El usuario ya no existe. Iniciá sesión nuevamente."
+            );
+        }
 
         var userCartOpt = cartRepository.lockByUserId(userId);
         var sessionCartOpt = (sessionId != null && !sessionId.isBlank())
@@ -59,6 +68,7 @@ public class CartServiceImpl implements CartService {
             }
             return ServiceResult.ok(cartMapper.toResponse(same));
         }
+
 
         // A) Cookie → carrito de OTRO usuario ⇒ ignorar y usar/crear el del usuario actual
         if (sessionCartOpt.isPresent()
@@ -218,11 +228,23 @@ public class CartServiceImpl implements CartService {
 
     /* =================== USER-FIRST OPS =================== */
 
+    private boolean userExists(Long userId) {
+        return userId != null && userRepository.existsById(userId);
+    }
+
     @Override
     @Transactional
     public ServiceResult<CartResponse> getOrCreate(Long userId, String sessionId) {
         // 1) Usuario autenticado → por userId
         if (userId != null) {
+
+            if (!userExists(userId)) {
+                return ServiceResult.error(
+                        HttpStatus.UNAUTHORIZED,
+                        "Sesión inválida. El usuario ya no existe. Iniciá sesión nuevamente."
+                );
+            }
+
             var existing = cartRepository.findByUserId(userId);
             if (existing.isPresent()) {
                 return ServiceResult.ok(cartMapper.toResponse(existing.get()));
@@ -462,6 +484,13 @@ public class CartServiceImpl implements CartService {
     /* =================== HELPER: resolver por user o cookie =================== */
     private Cart resolveCart(Long userId, String sessionId, boolean createIfMissing) {
         if (userId != null) {
+
+            if (!userExists(userId)) {
+                throw new EntityNotFoundException("Usuario autenticado no existe");
+                // O si querés usar ServiceResult en vez de excepción,
+                // podés cambiar la firma del método, pero así ya evitás la FK.
+            }
+
             // autenticado → por usuario
             return cartRepository.findByUserId(userId)
                     .orElseGet(() -> {

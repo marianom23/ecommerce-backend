@@ -66,8 +66,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/cart/attach").authenticated()
                         .requestMatchers("/api/cart/**").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/p/products/**").permitAll()
-                        .requestMatchers(HttpMethod.OPTIONS, "/p/products/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/banners/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/api/banners/**").permitAll()
+
+                        .requestMatchers(HttpMethod.GET, "/products/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/products/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/api/products/**").permitAll()
 

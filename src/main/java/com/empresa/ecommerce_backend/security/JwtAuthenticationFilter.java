@@ -1,6 +1,7 @@
 // src/main/java/com/empresa/ecommerce_backend/security/JwtAuthenticationFilter.java
 package com.empresa.ecommerce_backend.security;
 
+import com.empresa.ecommerce_backend.repository.UserRepository;
 import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import com.empresa.ecommerce_backend.web.AuthCookieManager;
 import jakarta.servlet.FilterChain;
@@ -23,6 +24,7 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final UserRepository userRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -32,7 +34,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String path = request.getRequestURI();
 
-        // Rutas públicas que no requieren JWT
+        // Rutas públicas
         if (path.startsWith("/api/login")
                 || path.startsWith("/api/register")
                 || path.startsWith("/api/verify-email")
@@ -51,53 +53,69 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = null;
 
-        // 1) Intentar leer de Authorization: Bearer xxx
+        // 1) Authorization: Bearer xxx
         String authHeader = request.getHeader("Authorization");
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
-            System.out.println("🔑 JWT encontrado en Authorization header");
         }
 
-        // 2) Si no, leer cookie httpOnly "auth_token"
+        // 2) Cookie auth_token
         if (token == null) {
             Cookie[] cookies = request.getCookies();
-            System.out.println("🔍 Buscando JWT en cookies...");
             if (cookies != null) {
                 for (Cookie c : cookies) {
-                    System.out.println("   Cookie -> " + c.getName());
                     if (AuthCookieManager.AUTH_COOKIE.equals(c.getName())) {
                         token = c.getValue();
-                        System.out.println("✅ auth_token encontrado en cookies");
                         break;
                     }
                 }
-            } else {
-                System.out.println("   No hay cookies en la request");
             }
         }
 
         if (token != null) {
             try {
-                // Delega en JwtService para validar y construir Authentication
                 Authentication authentication = jwtService.getAuthentication(token);
 
                 if (authentication != null) {
-                    ((AbstractAuthenticationToken) authentication)
-                            .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
-                    System.out.println("✅ Authentication seteada para principal: "
-                            + authentication.getPrincipal());
+                    Object principal = authentication.getPrincipal();
+                    Long userId = null;
+
+                    if (principal instanceof AuthUser authUser) {
+                        userId = authUser.getId();
+                    } else if (principal instanceof String s) {
+                        try {
+                            userId = Long.parseLong(s);
+                        } catch (NumberFormatException ignored) {
+                        }
+                    }
+
+                    if (userId != null && userRepository.existsById(userId)) {
+                        ((AbstractAuthenticationToken) authentication)
+                                .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    } else {
+                        SecurityContextHolder.clearContext();
+                        clearAuthCookie(response);
+                    }
+
                 } else {
-                    System.out.println("⚠️ jwtService.getAuthentication(token) devolvió null");
+                    SecurityContextHolder.clearContext();
+                    clearAuthCookie(response);
                 }
             } catch (Exception e) {
-                System.out.println("❌ Error validando JWT: " + e.getMessage());
                 SecurityContextHolder.clearContext();
+                clearAuthCookie(response);
             }
-        } else {
-            System.out.println("ℹ️ No se encontró token JWT ni en header ni en cookie");
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void clearAuthCookie(HttpServletResponse response) {
+        Cookie cookie = new Cookie(AuthCookieManager.AUTH_COOKIE, "");
+        cookie.setPath("/");
+        cookie.setHttpOnly(true);
+        cookie.setMaxAge(0); // borrar
+        response.addCookie(cookie);
     }
 }
