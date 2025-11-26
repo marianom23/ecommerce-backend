@@ -299,7 +299,6 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional
     public ServiceResult<CartResponse> addItem(Long userId, String sessionId, AddItemRequest dto) {
-        // ⛔ guest con cookie que apunta a carrito de usuario → prohibir
         var guard = forbidIfGuestTouchesUserCart(userId, sessionId);
         if (guard != null) return guard;
 
@@ -327,10 +326,17 @@ public class CartServiceImpl implements CartService {
 
         if (newQty > limit) {
             if (ignoresStock(variant)) {
-                // Digital on demand: capear sin error
-                newQty = limit;
+                // DIGITAL_ON_DEMAND
+                return ServiceResult.error(
+                        HttpStatus.CONFLICT,
+                        "Solo se permiten " + limit + " unidades por compra"
+                );
             } else {
-                return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + limit);
+                // productos con stock
+                return ServiceResult.error(
+                        HttpStatus.CONFLICT,
+                        "Stock insuficiente. Disponible: " + limit
+                );
             }
         }
 
@@ -351,6 +357,8 @@ public class CartServiceImpl implements CartService {
         Cart saved = cartRepository.save(cart);
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
+
+
 
     @Override
     @Transactional
@@ -378,12 +386,18 @@ public class CartServiceImpl implements CartService {
 
             if (desired > limit) {
                 if (ignoresStock(v)) {
-                    // Digital on demand: capear
-                    desired = limit;
+                    return ServiceResult.error(
+                            HttpStatus.CONFLICT,
+                            "Solo se permiten " + limit + " unidades por compra"
+                    );
                 } else {
-                    return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + limit);
+                    return ServiceResult.error(
+                            HttpStatus.CONFLICT,
+                            "Stock insuficiente. Disponible: " + limit
+                    );
                 }
             }
+
             item.setQuantity(desired);
         }
 
@@ -391,6 +405,8 @@ public class CartServiceImpl implements CartService {
         Cart saved = cartRepository.save(cart);
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
+
+
 
     @Override
     @Transactional
@@ -410,21 +426,28 @@ public class CartServiceImpl implements CartService {
 
         int newQty = item.getQuantity() + 1;
         int limit = availableForCart(v);
+
         if (newQty > limit) {
             if (ignoresStock(v)) {
-                newQty = limit; // capea callado
+                return ServiceResult.error(
+                        HttpStatus.CONFLICT,
+                        "Solo se permiten " + limit + " unidades por compra"
+                );
             } else {
-                return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente. Disponible: " + limit);
+                return ServiceResult.error(
+                        HttpStatus.CONFLICT,
+                        "Stock insuficiente. Disponible: " + limit
+                );
             }
         }
-        item.setQuantity(newQty);
-
 
         item.setQuantity(newQty);
         cart.setUpdatedAt(LocalDateTime.now());
         Cart saved = cartRepository.save(cart);
         return ServiceResult.ok(cartMapper.toResponse(saved));
     }
+
+
 
     @Override
     @Transactional
