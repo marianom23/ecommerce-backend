@@ -81,6 +81,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PUT,    "/api/variants/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/variants/**").hasRole("ADMIN")
 
+                        // Reviews: GET público para ver reviews, POST/PUT/DELETE requieren auth
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/product/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/user/**").permitAll()
+                        .requestMatchers(HttpMethod.OPTIONS, "/api/reviews/**").permitAll()
+
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/manager/**").hasAnyRole("ADMIN", "MANAGER")
 
