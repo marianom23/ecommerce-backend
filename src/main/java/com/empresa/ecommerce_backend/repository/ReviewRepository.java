@@ -22,4 +22,6 @@ public interface ReviewRepository extends BaseRepository<Review, Long> {
     Double averageRatingByProduct(Long productId);
 
     long countByProduct_Id(Long productId);
+
+    List<Review> findByRatingGreaterThanEqualOrderByReviewDateDesc(Integer rating, org.springframework.data.domain.Pageable pageable);
 }

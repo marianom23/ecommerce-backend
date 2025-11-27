@@ -54,4 +54,11 @@ public interface ReviewService {
      * @return ServiceResult con la review o vacío si no existe
      */
     ServiceResult<ReviewResponse> getUserReviewForProduct(Long userId, Long productId);
+
+    /**
+     * Obtener las mejores reviews (4 o 5 estrellas)
+     * @param limit Cantidad máxima de reviews a devolver
+     * @return ServiceResult con lista de reviews
+     */
+    ServiceResult<List<ReviewResponse>> getBestReviews(int limit);
 }

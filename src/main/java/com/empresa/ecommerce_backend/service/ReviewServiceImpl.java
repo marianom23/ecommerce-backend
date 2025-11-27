@@ -132,9 +132,19 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     public ServiceResult<ReviewResponse> getUserReviewForProduct(Long userId, Long productId) {
-        var review = reviewRepository.findByUser_IdAndProduct_Id(userId, productId);
-        
-        return review.map(r -> ServiceResult.ok(reviewMapper.toResponse(r)))
-                .orElse(ServiceResult.ok(null));
+        return reviewRepository.findByUser_IdAndProduct_Id(userId, productId)
+                .map(reviewMapper::toResponse)
+                .map(ServiceResult::ok)
+                .orElse(ServiceResult.ok(null)); // Retorna null si no existe, pero OK
+    }
+
+    @Override
+    public ServiceResult<List<ReviewResponse>> getBestReviews(int limit) {
+        var pageable = org.springframework.data.domain.PageRequest.of(0, limit);
+        var list = reviewRepository.findByRatingGreaterThanEqualOrderByReviewDateDesc(4, pageable)
+                .stream()
+                .map(reviewMapper::toResponse)
+                .toList();
+        return ServiceResult.ok(list);
     }
 }

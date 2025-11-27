@@ -88,4 +88,12 @@ public class ReviewController {
     ) {
         return reviewService.getUserReviewForProduct(user.getId(), productId);
     }
+
+    @GetMapping("/best")
+    @Operation(summary = "Obtener mejores reviews", description = "Obtiene las reviews con 4 o 5 estrellas para mostrar en carrusel")
+    public ServiceResult<List<ReviewResponse>> getBestReviews(
+            @RequestParam(defaultValue = "10") int limit
+    ) {
+        return reviewService.getBestReviews(limit);
+    }
 }

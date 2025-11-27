@@ -84,6 +84,7 @@ public class SecurityConfig {
                         // Reviews: GET público para ver reviews, POST/PUT/DELETE requieren auth
                         .requestMatchers(HttpMethod.GET, "/api/reviews/product/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/reviews/user/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/reviews/best").permitAll() // 👈 NUEVO
                         .requestMatchers(HttpMethod.OPTIONS, "/api/reviews/**").permitAll()
 
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
