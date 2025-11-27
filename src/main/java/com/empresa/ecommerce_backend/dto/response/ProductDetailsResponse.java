@@ -16,6 +16,7 @@ public class ProductDetailsResponse {
     private Long totalReviews;
     private BigDecimal price;
     private BigDecimal discountedPrice;
+    private BigDecimal priceWithTransfer;
     private ImagesDto imgs;
 
     private String description;
@@ -63,6 +64,7 @@ public class ProductDetailsResponse {
         private String sku;
         private BigDecimal price;
         private BigDecimal discountedPrice;
+        private BigDecimal priceWithTransfer;
         private Integer stock;
         private Map<String, String> attributes;
         private ImagesDto imgs;

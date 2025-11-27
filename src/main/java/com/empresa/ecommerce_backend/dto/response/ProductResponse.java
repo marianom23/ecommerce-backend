@@ -12,6 +12,7 @@ public class ProductResponse {
     private Long totalReviews;
     private BigDecimal price;
     private BigDecimal discountedPrice;
+    private BigDecimal priceWithTransfer;
     private ImagesDto imgs;
 
     private int variantCount;        // 👈 cantidad de variantes

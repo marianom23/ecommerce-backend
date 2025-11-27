@@ -34,6 +34,7 @@ public interface ProductMapper {
     @Mapping(target = "totalReviews", ignore = true)
     @Mapping(target = "price", expression = "java(computeRepresentativePrice(product))")
     @Mapping(target = "discountedPrice", expression = "java(computeDiscountedPrice(product))")
+    @Mapping(target = "priceWithTransfer", expression = "java(computePriceWithTransfer(product))") // 👈 NUEVO
     @Mapping(target = "imgs", expression = "java(buildImages(product))")
     @Mapping(target = "variantCount", expression = "java(product.getVariants() != null ? product.getVariants().size() : 0)")
     @Mapping(target = "defaultVariantId", expression = "java(getDefaultVariantId(product))")
@@ -95,6 +96,15 @@ public interface ProductMapper {
             }
         }
         return best.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /** Calcula precio con transferencia (10% off sobre el precio con descuento) */
+    default BigDecimal computePriceWithTransfer(Product p) {
+        BigDecimal discounted = computeDiscountedPrice(p);
+        if (discounted == null) return null;
+        // 10% de descuento adicional
+        BigDecimal transferDiscount = discounted.multiply(new BigDecimal("0.10"));
+        return discounted.subtract(transferDiscount).setScale(2, RoundingMode.HALF_UP);
     }
 
     /** Construye DTO de imágenes (solo imágenes del producto, no de variantes) */

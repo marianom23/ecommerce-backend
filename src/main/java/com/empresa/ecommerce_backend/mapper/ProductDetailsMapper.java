@@ -21,6 +21,7 @@ public interface ProductDetailsMapper {
     // precios representativos desde variantes
     @Mapping(target = "price",           expression = "java(minVariantPrice(variants))")
     @Mapping(target = "discountedPrice", expression = "java(discountedMinVariantPrice(product, variants))")
+    @Mapping(target = "priceWithTransfer", expression = "java(priceWithTransfer(product, variants))") // 👈 NUEVO
     // imágenes del producto (no de variante)
     @Mapping(target = "imgs", expression = "java(buildProductImages(product))")
     // metadatos
@@ -62,6 +63,18 @@ public interface ProductDetailsMapper {
         BigDecimal base = minVariantPrice(variants);
         if (base == null) return null;
         return applyBestDiscount(base, product != null ? product.getDiscounts() : null);
+    }
+
+    // Precio con transferencia (10% off sobre el precio con descuento)
+    default BigDecimal priceWithTransfer(Product product, List<ProductVariant> variants) {
+        BigDecimal discounted = discountedMinVariantPrice(product, variants);
+        return applyTransferDiscount(discounted);
+    }
+
+    default BigDecimal applyTransferDiscount(BigDecimal amount) {
+        if (amount == null) return null;
+        BigDecimal discount = amount.multiply(new BigDecimal("0.10"));
+        return amount.subtract(discount).setScale(2, RoundingMode.HALF_UP);
     }
 
     // ---------- Stock total (suma de variantes) ----------
@@ -153,7 +166,9 @@ public interface ProductDetailsMapper {
                     dto.setId(v.getId());
                     dto.setSku(v.getSku());
                     dto.setPrice(v.getPrice());
-                    dto.setDiscountedPrice(applyBestDiscount(v.getPrice(), productDiscounts));
+                    BigDecimal discounted = applyBestDiscount(v.getPrice(), productDiscounts);
+                    dto.setDiscountedPrice(discounted);
+                    dto.setPriceWithTransfer(applyTransferDiscount(discounted)); // 👈 NUEVO
                     dto.setStock(v.getStock());
                     dto.setAttributes(parseAttributesJson(v));
                     dto.setImgs(buildVariantImages(v));
