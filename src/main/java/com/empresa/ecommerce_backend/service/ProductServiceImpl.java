@@ -39,6 +39,7 @@ public class ProductServiceImpl implements ProductService {
     private final ProductMapper productMapper;
     private final ProductPageMapper productPageMapper;
     private final ProductVariantRepository productVariantRepository;
+    private final com.empresa.ecommerce_backend.repository.ReviewRepository reviewRepository;
 
     @Override
     @Transactional
@@ -48,14 +49,20 @@ public class ProductServiceImpl implements ProductService {
         }
         var entity = productMapper.toEntity(dto);
         var saved = productRepository.save(entity);
-        return ServiceResult.created(productMapper.toResponse(saved));
+        var response = productMapper.toResponse(saved);
+        enrichWithReviewStats(response, saved.getId());
+        return ServiceResult.created(response);
     }
 
     @Override
     public ServiceResult<List<ProductResponse>> getAllProducts() {
         var list = productRepository.findAll()
                 .stream()
-                .map(productMapper::toResponse)
+                .map(p -> {
+                    var response = productMapper.toResponse(p);
+                    enrichWithReviewStats(response, p.getId());
+                    return response;
+                })
                 .toList();
         return ServiceResult.ok(list);
     }
@@ -64,7 +71,9 @@ public class ProductServiceImpl implements ProductService {
     public ServiceResult<ProductResponse> getProductById(Long id) {
         var product = productRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
-        return ServiceResult.ok(productMapper.toResponse(product));
+        var response = productMapper.toResponse(product);
+        enrichWithReviewStats(response, id);
+        return ServiceResult.ok(response);
     }
 
     @Override
@@ -118,7 +127,11 @@ public class ProductServiceImpl implements ProductService {
             page = productRepository.findAll(spec, pageable);
         }
 
-        Page<ProductResponse> mapped = page.map(productMapper::toResponse);
+        Page<ProductResponse> mapped = page.map(p -> {
+            var response = productMapper.toResponse(p);
+            enrichWithReviewStats(response, p.getId());
+            return response;
+        });
         var response = productPageMapper.toPaginatedResponse(mapped, params);
         return ServiceResult.ok(response);
     }
@@ -162,4 +175,14 @@ public class ProductServiceImpl implements ProductService {
         };
     }
 
+    /**
+     * Enriquece un ProductResponse con estadísticas de reviews
+     */
+    private void enrichWithReviewStats(ProductResponse response, Long productId) {
+        Double avgRating = reviewRepository.averageRatingByProduct(productId);
+        Long totalReviews = reviewRepository.countByProduct_Id(productId);
+        
+        response.setAverageRating(avgRating);
+        response.setTotalReviews(totalReviews);
+    }
 }

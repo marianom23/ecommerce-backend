@@ -24,6 +24,7 @@ public class ProductDetailsServiceImpl implements ProductDetailsService {
     private final ProductRepository productRepository;
     private final ProductVariantRepository productVariantRepository;
     private final ProductDetailsMapper productDetailsMapper;
+    private final com.empresa.ecommerce_backend.repository.ReviewRepository reviewRepository;
 
     @Override
     public ServiceResult<ProductDetailsResponse> getDetails(Long productId) {
@@ -34,6 +35,13 @@ public class ProductDetailsServiceImpl implements ProductDetailsService {
                 productVariantRepository.findAllByProductIdOrderByIdAsc(productId);
 
         ProductDetailsResponse dto = productDetailsMapper.toDetails(product, variants);
+        
+        // Enriquecer con estadísticas de reviews
+        Double avgRating = reviewRepository.averageRatingByProduct(productId);
+        Long totalReviews = reviewRepository.countByProduct_Id(productId);
+        dto.setAverageRating(avgRating);
+        dto.setTotalReviews(totalReviews);
+        
         return ServiceResult.ok(dto);
     }
 }

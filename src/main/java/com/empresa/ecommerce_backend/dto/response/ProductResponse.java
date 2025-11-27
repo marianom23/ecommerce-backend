@@ -8,7 +8,8 @@ import java.util.List;
 public class ProductResponse {
     private Long id;
     private String title;
-    private int reviews;
+    private Double averageRating;
+    private Long totalReviews;
     private BigDecimal price;
     private BigDecimal discountedPrice;
     private ImagesDto imgs;

@@ -30,7 +30,8 @@ public interface ProductMapper {
     void updateEntity(@MappingTarget Product entity, ProductRequest dto);
 
     @Mapping(target = "title", source = "name")
-    @Mapping(target = "reviews", expression = "java(0)")
+    @Mapping(target = "averageRating", ignore = true)
+    @Mapping(target = "totalReviews", ignore = true)
     @Mapping(target = "price", expression = "java(computeRepresentativePrice(product))")
     @Mapping(target = "discountedPrice", expression = "java(computeDiscountedPrice(product))")
     @Mapping(target = "imgs", expression = "java(buildImages(product))")

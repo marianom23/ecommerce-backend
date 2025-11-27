@@ -12,7 +12,8 @@ import java.util.Map;
 public class ProductDetailsResponse {
     private Long id;
     private String title;
-    private int reviews;
+    private Double averageRating;
+    private Long totalReviews;
     private BigDecimal price;
     private BigDecimal discountedPrice;
     private ImagesDto imgs;

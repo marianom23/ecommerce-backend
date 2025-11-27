@@ -16,7 +16,8 @@ import java.util.stream.Collectors;
 public interface ProductDetailsMapper {
 
     @Mapping(target = "title", source = "product.name")
-    @Mapping(target = "reviews", expression = "java(0)")
+    @Mapping(target = "averageRating", ignore = true)
+    @Mapping(target = "totalReviews", ignore = true)
     // precios representativos desde variantes
     @Mapping(target = "price",           expression = "java(minVariantPrice(variants))")
     @Mapping(target = "discountedPrice", expression = "java(discountedMinVariantPrice(product, variants))")
