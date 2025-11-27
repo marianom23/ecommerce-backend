@@ -314,6 +314,9 @@ public class OrderServiceImpl implements OrderService {
         // ⏳ Ajustar expiración según el método de pago elegido
         o.setExpiresAt(calculateExpirationFor(method));
 
+        // Recalcular totales (por si aplica descuento de transferencia)
+        recalcTotals(o);
+
         Order saved = orderRepo.save(o);
         return ServiceResult.ok(orderMapper.toResponse(saved));
     }
@@ -330,7 +333,15 @@ public class OrderServiceImpl implements OrderService {
                 : BigDecimal.ZERO;
 
         BigDecimal taxAmount = calcularImpuestos(subTotal, o.getBillingInfo());
-        BigDecimal discountTotal = o.getDiscountTotal() != null ? o.getDiscountTotal() : BigDecimal.ZERO;
+        
+        // Descuento por método de pago (Transferencia = 10% off)
+        BigDecimal discountTotal = BigDecimal.ZERO;
+        if (o.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
+            discountTotal = subTotal.multiply(new BigDecimal("0.10"));
+        }
+        
+        // Si hubiera otros descuentos (cupones), se sumarían aquí
+        // discountTotal = discountTotal.add(couponDiscount);
 
         BigDecimal total = subTotal.subtract(discountTotal).add(shippingCost).add(taxAmount);
         if (total.compareTo(BigDecimal.ZERO) < 0) total = BigDecimal.ZERO;
@@ -338,8 +349,8 @@ public class OrderServiceImpl implements OrderService {
         o.setSubTotal(subTotal);
         o.setShippingCost(shippingCost);
         o.setTaxAmount(taxAmount);
-        o.setDiscountTotal(discountTotal);
-        o.setTotalAmount(total);
+        o.setDiscountTotal(discountTotal.setScale(2, java.math.RoundingMode.HALF_UP));
+        o.setTotalAmount(total.setScale(2, java.math.RoundingMode.HALF_UP));
     }
 
     private BigDecimal calcularEnvio(Object anyShippingSnapshot) {
