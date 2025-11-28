@@ -226,6 +226,52 @@ public class UserServiceImpl implements UserService {
 
 
 
+
+
+
+    /* =================== PROFILE & PASSWORD =================== */
+
+    @Override
+    @Transactional
+    public ServiceResult<UserMeResponse> updateProfile(Long userId, com.empresa.ecommerce_backend.dto.request.UpdateProfileRequest dto) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException("Usuario no encontrado"));
+
+        user.setFirstName(dto.getFirstName());
+        user.setLastName(dto.getLastName());
+
+        User saved = userRepository.save(user);
+        return ServiceResult.ok(userMapper.toMeResponse(saved));
+    }
+
+    @Override
+    @Transactional
+    public ServiceResult<Void> changePassword(Long userId, com.empresa.ecommerce_backend.dto.request.ChangePasswordRequest dto) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException("Usuario no encontrado"));
+
+        // Verificar que el usuario sea LOCAL
+        if (user.getAuthProvider() != com.empresa.ecommerce_backend.enums.AuthProvider.LOCAL) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Los usuarios registrados con Google/Microsoft no pueden cambiar contraseña aquí.");
+        }
+
+        // Verificar password actual
+        if (user.getPassword() != null && !passwordEncoder.matches(dto.getCurrentPassword(), user.getPassword())) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "La contraseña actual es incorrecta.");
+        }
+
+        // Verificar coincidencia de nueva password
+        if (!dto.getNewPassword().equals(dto.getConfirmNewPassword())) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Las nuevas contraseñas no coinciden.");
+        }
+
+        // Actualizar
+        user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+        userRepository.save(user);
+
+        return ServiceResult.ok(null);
+    }
+
     /* =================== HELPERS =================== */
 
     private Authentication buildAuthenticationFromUser(User user) {

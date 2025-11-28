@@ -90,6 +90,41 @@ public class AuthController {
         return userServiceImpl.getProfile(authentication);
     }
 
+    @PutMapping("/me/profile")
+    public ServiceResult<UserMeResponse> updateProfile(
+            Authentication authentication,
+            @Valid @RequestBody com.empresa.ecommerce_backend.dto.request.UpdateProfileRequest dto
+    ) {
+        Long userId = getUserIdFromAuth(authentication);
+        return userServiceImpl.updateProfile(userId, dto);
+    }
+
+    @PostMapping("/me/password")
+    public ServiceResult<Void> changePassword(
+            Authentication authentication,
+            @Valid @RequestBody com.empresa.ecommerce_backend.dto.request.ChangePasswordRequest dto
+    ) {
+        Long userId = getUserIdFromAuth(authentication);
+        return userServiceImpl.changePassword(userId, dto);
+    }
+
+    private Long getUserIdFromAuth(Authentication authentication) {
+        if (authentication == null || authentication.getPrincipal() == null) {
+            throw new IllegalStateException("No autenticado");
+        }
+        try {
+            // Asumiendo que el principal es AuthUser o tiene getId()
+            return (Long) authentication.getPrincipal().getClass().getMethod("getId").invoke(authentication.getPrincipal());
+        } catch (Exception e) {
+            // Fallback si es solo ID numérico
+            try {
+                return Long.parseLong(authentication.getName());
+            } catch (NumberFormatException ex) {
+                throw new IllegalStateException("No se pudo obtener ID de usuario");
+            }
+        }
+    }
+
     /* -------- Logout -------- */
     @PostMapping("/logout")
     public ServiceResult<Void> logout(HttpServletRequest request, HttpServletResponse response) {
