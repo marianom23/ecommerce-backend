@@ -61,12 +61,15 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         v.setProduct(product);
 
         // Asegurar defaults si es digital
-        if (v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND) {
+        if (v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND
+            || v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_INSTANT) {
             v.setWeightKg(null);
             v.setLengthCm(null);
             v.setWidthCm(null);
             v.setHeightCm(null);
-            if (v.getStock() == null) v.setStock(0); // Stock infinito o no aplica
+            // Para DIGITAL_INSTANT quizás sí quieras controlar stock, pero para ON_DEMAND no.
+            // Dejemos que si viene null, se ponga en 0.
+            if (v.getStock() == null) v.setStock(0);
         }
 
         var saved = variantRepository.save(v);
