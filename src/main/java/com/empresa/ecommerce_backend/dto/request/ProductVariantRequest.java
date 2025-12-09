@@ -19,21 +19,22 @@ public class ProductVariantRequest {
     @DecimalMin(value = "0.00")
     private BigDecimal price;
 
-    @NotNull
     @Min(0)
-    private Integer stock;
+    private Integer stock;                // Opcional para digitales
 
-    // Logística (Andreani)
-    @NotNull @DecimalMin(value = "0.001")  // kg
+    private com.empresa.ecommerce_backend.enums.FulfillmentType fulfillmentType;
+
+    // Logística (Andreani) - Opcionales (validado en Service si es PHYSICAL)
+    @DecimalMin(value = "0.001")  // kg
     private BigDecimal weightKg;
 
-    @NotNull @DecimalMin(value = "0.01")   // cm
+    @DecimalMin(value = "0.01")   // cm
     private BigDecimal lengthCm;
 
-    @NotNull @DecimalMin(value = "0.01")   // cm
+    @DecimalMin(value = "0.01")   // cm
     private BigDecimal widthCm;
 
-    @NotNull @DecimalMin(value = "0.01")   // cm
+    @DecimalMin(value = "0.01")   // cm
     private BigDecimal heightCm;
 
     // Atributos (talle/color/etc.) si no los modelás aún

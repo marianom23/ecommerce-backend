@@ -54,11 +54,38 @@ public class ProductVariantServiceImpl implements ProductVariantService {
             return ServiceResult.error(HttpStatus.CONFLICT, "SKU de variante ya existe.");
         }
 
+        // Validación condicional
+        validateFulfillment(req);
+
         var v = mapper.toEntity(req);
         v.setProduct(product);
 
+        // Asegurar defaults si es digital
+        if (v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND) {
+            v.setWeightKg(null);
+            v.setLengthCm(null);
+            v.setWidthCm(null);
+            v.setHeightCm(null);
+            if (v.getStock() == null) v.setStock(0); // Stock infinito o no aplica
+        }
+
         var saved = variantRepository.save(v);
         return ServiceResult.created(mapper.toResponse(saved));
+    }
+
+    private void validateFulfillment(ProductVariantRequest req) {
+        // Default a PHYSICAL si viene null
+        if (req.getFulfillmentType() == null) {
+            req.setFulfillmentType(com.empresa.ecommerce_backend.enums.FulfillmentType.PHYSICAL);
+        }
+
+        if (req.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.PHYSICAL) {
+            if (req.getStock() == null) throw new IllegalArgumentException("Stock es requerido para productos físicos");
+            if (req.getWeightKg() == null) throw new IllegalArgumentException("Peso es requerido para productos físicos");
+            if (req.getLengthCm() == null) throw new IllegalArgumentException("Largo es requerido para productos físicos");
+            if (req.getWidthCm() == null) throw new IllegalArgumentException("Ancho es requerido para productos físicos");
+            if (req.getHeightCm() == null) throw new IllegalArgumentException("Alto es requerido para productos físicos");
+        }
     }
 
     @Override
