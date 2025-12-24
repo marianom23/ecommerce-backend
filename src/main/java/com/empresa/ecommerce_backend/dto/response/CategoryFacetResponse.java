@@ -8,5 +8,6 @@ import lombok.Data;
 public class CategoryFacetResponse {
     private Long id;
     private String name;
+    private String imageUrl;
     private Long count;
 }

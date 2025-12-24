@@ -22,7 +22,7 @@ public interface CategoryRepository extends BaseRepository<Category, Long> {
 
     @Query(
             "select new com.empresa.ecommerce_backend.dto.response.CategoryFacetResponse(" +
-                    "  c.id, c.name, count(distinct p.id)" +
+                    "  c.id, c.name, c.imageUrl, count(distinct p.id)" +
                     ") " +
                     "from Category c " +
                     "left join Product p on p.category = c " +
