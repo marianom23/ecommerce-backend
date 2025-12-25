@@ -89,6 +89,7 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/manager/**").hasAnyRole("ADMIN", "MANAGER")
+                        .requestMatchers("/api/suppliers/**").hasRole("ADMIN")
 
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
