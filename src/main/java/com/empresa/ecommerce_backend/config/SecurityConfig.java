@@ -127,7 +127,9 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
-                "https://ecommerce-frontend-ebon-omega.vercel.app"
+                "https://ecommerce-frontend-ebon-omega.vercel.app",
+                "https://hornerotech.com.ar",
+                "https://www.hornerotech.com.ar"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
