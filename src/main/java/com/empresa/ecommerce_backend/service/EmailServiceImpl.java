@@ -23,7 +23,8 @@ public class EmailServiceImpl implements EmailService {
     @Value("${spring.mail.username}")
     private String fromEmail;
 
-    private static final String ADMIN_EMAIL = "hornerotech@gmail.com";
+    @Value("${app.admin.email}")
+    private String adminEmail;
 
     @Async
     @Override
@@ -34,7 +35,7 @@ public class EmailServiceImpl implements EmailService {
         sendHtmlEmail(order.getUser().getEmail(), subject, body);
         
         // Copia al admin
-        sendHtmlEmail(ADMIN_EMAIL, "[ADMIN] Nueva Orden #" + order.getOrderNumber(), body);
+        sendHtmlEmail(adminEmail, subject, body);
     }
 
     @Async
@@ -50,7 +51,7 @@ public class EmailServiceImpl implements EmailService {
                 "</ul>" +
                 "<p>Por favor, verificá la acreditación y aprobá el pago en el panel de administración.</p>";
         
-        sendHtmlEmail(ADMIN_EMAIL, subject, body);
+        sendHtmlEmail(adminEmail, subject, body);
     }
 
     @Async

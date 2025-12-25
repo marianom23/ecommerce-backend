@@ -389,16 +389,10 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return switch (method) {
-            case CARD ->
-                    LocalDateTime.now().plusHours(1); // pago inmediato
-            case MERCADO_PAGO ->
-                    LocalDateTime.now().plusMinutes(30); // preferencia MP rápida
-            case PAYPAL ->
-                    LocalDateTime.now().plusMinutes(45); // un poco más de margen
-            case CASH ->
-                    LocalDateTime.now().plusHours(24);   // efectivo
-            case BANK_TRANSFER ->
-                    LocalDateTime.now().plusHours(48);   // transferencia
+            case BANK_TRANSFER, CASH ->
+                    LocalDateTime.now().plusHours(48);   // transferencia / efectivo
+            default ->
+                    LocalDateTime.now().plusMinutes(30); // MP, Card, etc.
         };
     }
 }

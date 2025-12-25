@@ -64,7 +64,11 @@ public class PaymentServiceImpl implements PaymentService {
         p.setAmount(o.getTotalAmount());
         p.setMethod(method);
         p.setStatus(PaymentStatus.INITIATED);
-        p.setExpiresAt(LocalDateTime.now().plusMinutes(1));
+        LocalDateTime expiration = switch (method) {
+            case BANK_TRANSFER, CASH -> LocalDateTime.now().plusHours(48);
+            default -> LocalDateTime.now().plusMinutes(30); // MercadoPago, Card, etc.
+        }; 
+        p.setExpiresAt(expiration);
 
         try {
             if (method == PaymentMethod.MERCADO_PAGO || method == PaymentMethod.CARD) {
