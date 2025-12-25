@@ -39,6 +39,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final ProductVariantRepository variantRepo;
     private final OrderMapper orderMapper;
     private final ProductRepository productRepo;
+    private final com.empresa.ecommerce_backend.service.interfaces.EmailService emailService;
 
     @Value("${mp.access-token}")
     private String mpAccessToken;
@@ -80,6 +81,10 @@ public class PaymentServiceImpl implements PaymentService {
         orderRepo.save(o);
 
         saveEvent(p, null, PaymentStatus.INITIATED, "system", "payment initiated");
+        
+        // 📧 Notificar nueva orden
+        emailService.sendOrderConfirmation(o);
+
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
 
@@ -130,6 +135,9 @@ public class PaymentServiceImpl implements PaymentService {
                     o.setStatus(OrderStatus.PAID);
                     registerSale(o); // 👈 NUEVO: suma soldCount en variant y product
                     orderRepo.save(o);
+                    
+                    // 📧 Notificar pago aprobado
+                    emailService.sendPaymentApprovedNotification(o);
                 }
                 case REJECTED, CANCELED, EXPIRED -> {
                     rollbackStock(o);
@@ -168,6 +176,10 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         saveEvent(p, prev, PaymentStatus.PENDING, "user", "user marked bank transfer done");
+        
+        // 📧 Notificar al admin que hay una transferencia para revisar
+        emailService.sendTransferPendingAdminNotification(o, p);
+        
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
 
@@ -192,6 +204,9 @@ public class PaymentServiceImpl implements PaymentService {
             if (o.getPaidAt() == null) o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
             o.setStatus(OrderStatus.PAID);
             registerSale(o); // 👈 NUEVO
+            
+            // 📧 Notificar pago aprobado
+            emailService.sendPaymentApprovedNotification(o);
         } else {
             rollbackStock(o);
             o.setStatus(OrderStatus.CANCELED);

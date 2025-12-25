@@ -32,6 +32,7 @@ public class PaymentController {
     }
 
     // Admin aprueba/rechaza la transferencia
+    @org.springframework.security.access.prepost.PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/orders/{orderId}/bank-transfer/review")
     public ServiceResult<OrderResponse> adminReviewBankTransfer(
             @PathVariable Long orderId,
