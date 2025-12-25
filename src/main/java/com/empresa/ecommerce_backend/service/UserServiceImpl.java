@@ -19,7 +19,6 @@ import com.empresa.ecommerce_backend.repository.UserRepository;
 import com.empresa.ecommerce_backend.security.AuthUser;
 import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import com.empresa.ecommerce_backend.service.interfaces.LoginAttemptService;
-import com.empresa.ecommerce_backend.service.interfaces.MailService;
 import com.empresa.ecommerce_backend.service.interfaces.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -53,7 +52,6 @@ public class UserServiceImpl implements UserService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
-    private final MailService mailService;
     private final UserMapper userMapper;
     private final LoginAttemptService loginAttemptService;
     private final ApplicationEventPublisher publisher;

@@ -7,4 +7,5 @@ public interface EmailService {
     void sendOrderConfirmation(Order order);
     void sendTransferPendingAdminNotification(Order order, Payment payment);
     void sendPaymentApprovedNotification(Order order);
+    void sendVerificationEmail(String to, String token);
 }

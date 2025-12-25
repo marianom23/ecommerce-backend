@@ -1,5 +1,6 @@
 package com.empresa.ecommerce_backend.service;
 
+import com.empresa.ecommerce_backend.exception.EmailSendingException;
 import com.empresa.ecommerce_backend.model.Order;
 import com.empresa.ecommerce_backend.model.Payment;
 import com.empresa.ecommerce_backend.service.interfaces.EmailService;
@@ -8,10 +9,12 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.util.UriComponentsBuilder;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +29,16 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.admin.email}")
     private String adminEmail;
 
-    @Async
+    @Value("${app.backend.base-url}")
+    private String backendBaseUrl;
+
+    @Value("${app.frontend.base-url:}")
+    private String frontendBaseUrl;
+
+    @Value("${app.mail.subject.verify:Verifica tu cuenta}")
+    private String verifySubject;
+
+    @Async("mailExecutor")
     @Override
     public void sendOrderConfirmation(Order order) {
         // Email al cliente
@@ -38,7 +50,7 @@ public class EmailServiceImpl implements EmailService {
         sendHtmlEmail(adminEmail, subject, body);
     }
 
-    @Async
+    @Async("mailExecutor")
     @Override
     public void sendTransferPendingAdminNotification(Order order, Payment payment) {
         String subject = "[ADMIN] Nueva Transferencia Informada - Orden #" + order.getOrderNumber();
@@ -54,12 +66,80 @@ public class EmailServiceImpl implements EmailService {
         sendHtmlEmail(adminEmail, subject, body);
     }
 
-    @Async
+    @Async("mailExecutor")
     @Override
     public void sendPaymentApprovedNotification(Order order) {
         String subject = "Pago Aprobado - Orden #" + order.getOrderNumber();
         String body = buildOrderHtml(order, "¡Pago Aprobado!", "Hemos recibido tu pago correctamente. Pronto prepararemos tu pedido.");
         sendHtmlEmail(order.getUser().getEmail(), subject, body);
+    }
+
+    @Async("mailExecutor")
+    @Override
+    public void sendVerificationEmail(String to, String token) {
+        if (to == null || to.isBlank()) {
+            throw new EmailSendingException("Destinatario vacío", null);
+        }
+        if (token == null || token.isBlank()) {
+            throw new EmailSendingException("Token de verificación vacío", null);
+        }
+
+        final String base = normalizeBase(!isBlank(frontendBaseUrl) ? frontendBaseUrl : backendBaseUrl);
+        final String path = !isBlank(frontendBaseUrl) ? "/verify-email" : "/api/verify-email";
+
+        String verificationUrl = UriComponentsBuilder
+                .fromHttpUrl(base)
+                .path(path)
+                .queryParam("token", token)
+                .build(true)
+                .toUriString();
+
+        String htmlContent = """
+            <html>
+                <body style="font-family: Arial, sans-serif;">
+                    <h2>¡Bienvenido!</h2>
+                    <p>Haz clic en el botón para verificar tu cuenta:</p>
+                    <p>
+                      <a href="%s" style="display:inline-block;padding:10px 20px;background-color:#4CAF50;color:white;text-decoration:none;border-radius:5px;">
+                        Verificar cuenta
+                      </a>
+                    </p>
+                    <p>O copia y pega este enlace en tu navegador:</p>
+                    <p><a href="%s">%s</a></p>
+                </body>
+            </html>
+        """.formatted(verificationUrl, verificationUrl, verificationUrl);
+
+        String textContent = """
+            ¡Bienvenido!
+            
+            Verificá tu cuenta usando este enlace:
+            %s
+        """.formatted(verificationUrl);
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromEmail);
+            helper.setTo(to);
+            helper.setSubject(verifySubject);
+            helper.setText(textContent, htmlContent);
+
+            mailSender.send(message);
+            log.info("Email de verificación enviado a {}", to);
+
+        } catch (MessagingException | MailException e) {
+            throw new EmailSendingException("Error al enviar el correo de verificación", e);
+        }
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    private static String normalizeBase(String base) {
+        return base != null ? base.replaceAll("/+$", "") : "";
     }
 
     private void sendHtmlEmail(String to, String subject, String htmlBody) {

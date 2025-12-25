@@ -1,7 +1,7 @@
 // src/main/java/com/empresa/ecommerce_backend/events/UserRegisteredListener.java
 package com.empresa.ecommerce_backend.events;
 
-import com.empresa.ecommerce_backend.service.interfaces.MailService;
+import com.empresa.ecommerce_backend.service.interfaces.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -12,11 +12,11 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class UserRegisteredListener {
 
-    private final MailService mailService;
+    private final EmailService emailService;
 
     @Async("mailExecutor") // o @Async simple si no definiste un executor con nombre
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onUserRegistered(UserRegisteredEvent event) {
-        mailService.sendVerificationEmail(event.email(), event.token());
+        emailService.sendVerificationEmail(event.email(), event.token());
     }
 }
