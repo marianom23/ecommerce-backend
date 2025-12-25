@@ -33,8 +33,5 @@ public class ServiceResult<T> {
         return status != null && status.is2xxSuccessful();
     }
 
-    // 👇 NUEVO: alias para data, para que el código que usa getBody() compile
-    public T getBody() {
-        return data;
-    }
+
 }

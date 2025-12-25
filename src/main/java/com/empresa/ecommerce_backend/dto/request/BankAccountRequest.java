@@ -14,6 +14,10 @@ public class BankAccountRequest {
     @NotBlank
     private String holderName;
 
+    private String cuil;
+
+    private String accountType;
+
     @NotBlank
     private String cbu;
 

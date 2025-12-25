@@ -9,6 +9,8 @@ public class BankAccountResponse {
     private Long id;
     private String bankName;
     private String holderName;
+    private String cuil;
+    private String accountType;
     private String cbu;
     private String alias;
     private String accountNumber;

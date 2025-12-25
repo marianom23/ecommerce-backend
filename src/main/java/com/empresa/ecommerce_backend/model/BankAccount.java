@@ -26,6 +26,12 @@ public class BankAccount {
     @NotBlank
     private String holderName; // e.g. "Hornero Tech S.A."
 
+    @Column(length = 20)
+    private String cuil;
+
+    @Column(length = 50)
+    private String accountType; // e.g. "Caja de Ahorro", "Cuenta Corriente"
+
     @Column(nullable = false, unique = true)
     @NotBlank
     private String cbu;
