@@ -76,7 +76,7 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
 
     List<Order> findByOrderDateBetween(LocalDateTime from, LocalDateTime to);
 
-    @EntityGraph(attributePaths = {"items", "items.product"})
+    @EntityGraph(attributePaths = {"items", "items.variant", "items.variant.product"})
     Optional<Order> findWithItemsById(Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
