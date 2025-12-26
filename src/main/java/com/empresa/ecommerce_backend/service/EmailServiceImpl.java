@@ -30,6 +30,7 @@ public class EmailServiceImpl implements EmailService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
     private final BankAccountRepository bankAccountRepository;
+    private final com.empresa.ecommerce_backend.repository.OrderRepository orderRepo;
 
     @Value("${resend.api-key}")
     private String resendApiKey;
@@ -50,8 +51,15 @@ public class EmailServiceImpl implements EmailService {
     private String verifySubject;
 
     @Async("mailExecutor")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @Override
-    public void sendOrderConfirmation(Order order) {
+    public void sendOrderConfirmation(Long orderId) {
+        Order order = orderRepo.findWithItemsById(orderId).orElse(null);
+        if (order == null) {
+            log.error("sendOrderConfirmation: Orden ID {} no encontrada", orderId);
+            return;
+        }
+
         // Lógica condicional según método de pago
         if (order.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
             // 1. Enviar instrucciones de transferencia al usuario
@@ -123,8 +131,18 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Async("mailExecutor")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @Override
-    public void sendTransferPendingAdminNotification(Order order, Payment payment) {
+    public void sendTransferPendingAdminNotification(Long orderId, Long paymentId) {
+        Order order = orderRepo.findById(orderId).orElse(null);
+        if (order == null) return;
+        
+        Payment payment = order.getPayment(); // Assuming payment is loaded or fetch it if needed
+        if (payment == null || !payment.getId().equals(paymentId)) {
+             // Fallback if payment not found on order or mismatch
+             return; 
+        }
+
         String subject = "[ADMIN] Transferencia Informada - Orden #" + order.getOrderNumber();
         String body = "<h1>Transferencia Informada</h1>" +
                 "<p>El usuario ha informado una transferencia para la orden <b>" + order.getOrderNumber() + "</b>.</p>" +
@@ -139,8 +157,12 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Async("mailExecutor")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
     @Override
-    public void sendPaymentApprovedNotification(Order order) {
+    public void sendPaymentApprovedNotification(Long orderId) {
+        Order order = orderRepo.findWithItemsById(orderId).orElse(null);
+        if (order == null) return;
+
         String subject = "Pago Aprobado - Orden #" + order.getOrderNumber();
         String body = buildOrderHtml(order, "¡Pago Aprobado!", "Hemos recibido tu pago correctamente. Pronto prepararemos tu pedido.");
         sendHtmlEmail(order.getUser().getEmail(), subject, body);

@@ -87,7 +87,7 @@ public class PaymentServiceImpl implements PaymentService {
         saveEvent(p, null, PaymentStatus.INITIATED, "system", "payment initiated");
         
         // 📧 Notificar nueva orden
-        emailService.sendOrderConfirmation(o);
+        emailService.sendOrderConfirmation(o.getId());
 
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
@@ -108,7 +108,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (extRef == null || !extRef.startsWith("order-")) return;
         Long orderId = Long.valueOf(extRef.substring("order-".length()));
 
-        Order o = orderRepo.findById(orderId)
+        Order o = orderRepo.findByIdWithLock(orderId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
 
         Payment p = o.getPayment();
@@ -141,7 +141,7 @@ public class PaymentServiceImpl implements PaymentService {
                     orderRepo.save(o);
                     
                     // 📧 Notificar pago aprobado
-                    emailService.sendPaymentApprovedNotification(o);
+                    emailService.sendPaymentApprovedNotification(o.getId());
                 }
                 case REJECTED, CANCELED, EXPIRED -> {
                     rollbackStock(o);
@@ -182,7 +182,7 @@ public class PaymentServiceImpl implements PaymentService {
         saveEvent(p, prev, PaymentStatus.PENDING, "user", "user marked bank transfer done");
         
         // 📧 Notificar al admin que hay una transferencia para revisar
-        emailService.sendTransferPendingAdminNotification(o, p);
+        emailService.sendTransferPendingAdminNotification(o.getId(), p.getId());
         
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
@@ -210,7 +210,7 @@ public class PaymentServiceImpl implements PaymentService {
             registerSale(o); // 👈 NUEVO
             
             // 📧 Notificar pago aprobado
-            emailService.sendPaymentApprovedNotification(o);
+            emailService.sendPaymentApprovedNotification(o.getId());
         } else {
             rollbackStock(o);
             o.setStatus(OrderStatus.CANCELED);

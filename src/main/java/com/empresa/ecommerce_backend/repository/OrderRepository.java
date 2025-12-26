@@ -76,4 +76,8 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
 
     @EntityGraph(attributePaths = {"items", "items.product"})
     Optional<Order> findWithItemsById(Long id);
+
+    @jakarta.persistence.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id")
+    Optional<Order> findByIdWithLock(@Param("id") Long id);
 }
