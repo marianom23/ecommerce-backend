@@ -14,6 +14,8 @@ import com.empresa.ecommerce_backend.model.Order;
 import com.empresa.ecommerce_backend.enums.OrderStatus;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import jakarta.persistence.Lock;
+import jakarta.persistence.LockModeType;
 
 public interface OrderRepository extends BaseRepository<Order, Long> {
 
@@ -77,7 +79,7 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
     @EntityGraph(attributePaths = {"items", "items.product"})
     Optional<Order> findWithItemsById(Long id);
 
-    @jakarta.persistence.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :id")
     Optional<Order> findByIdWithLock(@Param("id") Long id);
 }
