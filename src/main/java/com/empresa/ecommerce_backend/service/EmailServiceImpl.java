@@ -169,6 +169,29 @@ public class EmailServiceImpl implements EmailService {
     }
 
     @Async("mailExecutor")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @Override
+    public void sendPaymentExpiredNotification(Long orderId) {
+        Order order = orderRepo.findById(orderId).orElse(null);
+        if (order == null) return;
+
+        String subject = "Orden Cancelada por Expiración - #" + order.getOrderNumber();
+        String body = """
+            <html>
+                <body style="font-family: Arial, sans-serif;">
+                    <h2>Orden Cancelada</h2>
+                    <p>Lamentablemente, tu orden <b>#%s</b> ha sido cancelada por falta de confirmación de pago.</p>
+                    <p>Si realizaste la transferencia, por favor contactanos con el comprobante.</p>
+                    <p>Si aún estás interesado en tu compra, podés crear una nueva orden desde nuestra web.</p>
+                    <p><i>Recordá que tenés que confirmar la transferencia dentro de las 2 horas de creada la orden.</i></p>
+                </body>
+            </html>
+        """.formatted(order.getOrderNumber());
+
+        sendHtmlEmail(order.getUser().getEmail(), subject, body);
+    }
+
+    @Async("mailExecutor")
     @Override
     public void sendVerificationEmail(String to, String token) {
         if (to == null || to.isBlank()) throw new EmailSendingException("Destinatario vacío", null);

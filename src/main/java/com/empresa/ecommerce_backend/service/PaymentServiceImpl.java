@@ -65,7 +65,8 @@ public class PaymentServiceImpl implements PaymentService {
         p.setMethod(method);
         p.setStatus(PaymentStatus.INITIATED);
         LocalDateTime expiration = switch (method) {
-            case BANK_TRANSFER, CASH -> LocalDateTime.now().plusHours(48);
+            case BANK_TRANSFER -> LocalDateTime.now().plusHours(2);  // 2 horas para hacer la transferencia
+            case CASH -> LocalDateTime.now().plusHours(48);
             default -> LocalDateTime.now().plusMinutes(30); // MercadoPago, Card, etc.
         }; 
         p.setExpiresAt(expiration);
@@ -171,7 +172,7 @@ public class PaymentServiceImpl implements PaymentService {
         p.setStatus(PaymentStatus.PENDING);
         p.setTransferReference(reference);
         p.setReceiptUrl(receiptUrl);
-        p.setExpiresAt(LocalDateTime.now().plusHours(48));
+        p.setExpiresAt(LocalDateTime.now().plusHours(48));  // 48 horas para que admin revise
         paymentRepo.save(p);
 
         if (o.getStatus() == OrderStatus.PENDING) {
@@ -286,6 +287,10 @@ public class PaymentServiceImpl implements PaymentService {
             rollbackStock(o);
             o.setStatus(OrderStatus.CANCELED);
             orderRepo.save(o);
+            
+            // 📧 Notificar al usuario que su orden expiró
+            emailService.sendPaymentExpiredNotification(o.getId());
+            
             n++;
         }
         return n;
