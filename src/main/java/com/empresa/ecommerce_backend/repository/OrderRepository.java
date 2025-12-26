@@ -14,7 +14,7 @@ import com.empresa.ecommerce_backend.model.Order;
 import com.empresa.ecommerce_backend.enums.OrderStatus;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import jakarta.persistence.Lock;
+import org.springframework.data.jpa.repository.Lock;
 import jakarta.persistence.LockModeType;
 
 public interface OrderRepository extends BaseRepository<Order, Long> {
