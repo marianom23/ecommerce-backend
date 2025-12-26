@@ -24,8 +24,8 @@ public class PaymentController {
             @PathVariable Long orderId,
             @RequestBody(required = false) BankTransferUserConfirmRequest req
     ) {
-        // userId desde el contexto (idealmente en un SecurityService)
-        Long userId = /* TODO: SecurityContext */ null;
+        // Obtener userId desde SecurityContext
+        Long userId = getCurrentUserId();
         String reference = req != null ? req.getReference() : null;
         String receiptUrl = req != null ? req.getReceiptUrl() : null;
         return paymentService.confirmBankTransferByUser(orderId, userId, reference, receiptUrl);
@@ -58,5 +58,17 @@ public class PaymentController {
         // TODO: validar firma
         paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
         return "ok";
+    }
+
+    private Long getCurrentUserId() {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || auth.getPrincipal() == null) {
+            throw new IllegalArgumentException("No autenticado.");
+        }
+        try {
+            return (Long) auth.getPrincipal().getClass().getMethod("getId").invoke(auth.getPrincipal());
+        } catch (Exception e) {
+            throw new IllegalStateException("No se pudo obtener ID de usuario autenticado");
+        }
     }
 }
