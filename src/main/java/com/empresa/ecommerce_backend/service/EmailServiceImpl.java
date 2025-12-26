@@ -4,26 +4,32 @@ import com.empresa.ecommerce_backend.exception.EmailSendingException;
 import com.empresa.ecommerce_backend.model.Order;
 import com.empresa.ecommerce_backend.model.Payment;
 import com.empresa.ecommerce_backend.service.interfaces.EmailService;
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.MailException;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriComponentsBuilder;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class EmailServiceImpl implements EmailService {
 
-    private final JavaMailSender mailSender;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    @Value("${spring.mail.username}")
+    @Value("${resend.api-key}")
+    private String resendApiKey;
+
+    @Value("${app.mail.from:onboarding@resend.dev}")
     private String fromEmail;
 
     @Value("${app.admin.email}")
@@ -41,9 +47,10 @@ public class EmailServiceImpl implements EmailService {
     @Async("mailExecutor")
     @Override
     public void sendOrderConfirmation(Order order) {
-        // Email al cliente
         String subject = "Confirmación de Orden #" + order.getOrderNumber();
         String body = buildOrderHtml(order, "¡Gracias por tu compra!", "Tu orden ha sido recibida y está siendo procesada.");
+        
+        // Email al cliente
         sendHtmlEmail(order.getUser().getEmail(), subject, body);
         
         // Copia al admin
@@ -77,12 +84,8 @@ public class EmailServiceImpl implements EmailService {
     @Async("mailExecutor")
     @Override
     public void sendVerificationEmail(String to, String token) {
-        if (to == null || to.isBlank()) {
-            throw new EmailSendingException("Destinatario vacío", null);
-        }
-        if (token == null || token.isBlank()) {
-            throw new EmailSendingException("Token de verificación vacío", null);
-        }
+        if (to == null || to.isBlank()) throw new EmailSendingException("Destinatario vacío", null);
+        if (token == null || token.isBlank()) throw new EmailSendingException("Token vacío", null);
 
         final String base = normalizeBase(!isBlank(frontendBaseUrl) ? frontendBaseUrl : backendBaseUrl);
         final String path = !isBlank(frontendBaseUrl) ? "/verify-email" : "/api/verify-email";
@@ -110,52 +113,37 @@ public class EmailServiceImpl implements EmailService {
             </html>
         """.formatted(verificationUrl, verificationUrl, verificationUrl);
 
-        String textContent = """
-            ¡Bienvenido!
-            
-            Verificá tu cuenta usando este enlace:
-            %s
-        """.formatted(verificationUrl);
-
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(to);
-            helper.setSubject(verifySubject);
-            helper.setText(textContent, htmlContent);
-
-            mailSender.send(message);
-            log.info("Email de verificación enviado a {}", to);
-
-        } catch (MessagingException | MailException e) {
-            throw new EmailSendingException("Error al enviar el correo de verificación", e);
-        }
-    }
-
-    private static boolean isBlank(String s) {
-        return s == null || s.isBlank();
-    }
-
-    private static String normalizeBase(String base) {
-        return base != null ? base.replaceAll("/+$", "") : "";
+        sendHtmlEmail(to, verifySubject, htmlContent);
     }
 
     private void sendHtmlEmail(String to, String subject, String htmlBody) {
         try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-            
-            helper.setFrom(fromEmail);
-            helper.setTo(to);
-            helper.setSubject(subject);
-            helper.setText(htmlBody, true);
-            
-            mailSender.send(message);
-            log.info("Email enviado a {} con asunto '{}'", to, subject);
-        } catch (MessagingException e) {
-            log.error("Error enviando email a {}", to, e);
+            Map<String, Object> payload = Map.of(
+                    "from", fromEmail,
+                    "to", to,
+                    "subject", subject,
+                    "html", htmlBody
+            );
+
+            String jsonBody = objectMapper.writeValueAsString(payload);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.resend.com/emails"))
+                    .header("Authorization", "Bearer " + resendApiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200 || response.statusCode() == 201) {
+                log.info("Email enviado exitosamente a {} (Resend ID: {})", to, response.body());
+            } else {
+                log.error("Error enviando email a {}: Status {} - Body {}", to, response.statusCode(), response.body());
+            }
+
+        } catch (Exception e) {
+            log.error("Excepción enviando email a {}", to, e);
         }
     }
 
@@ -168,17 +156,27 @@ public class EmailServiceImpl implements EmailService {
         sb.append("<table border='1' cellpadding='5' cellspacing='0'>");
         sb.append("<tr><th>Producto</th><th>Cant</th><th>Total</th></tr>");
         
-        order.getItems().forEach(item -> {
-            sb.append("<tr>");
-            sb.append("<td>").append(item.getProductName()).append("</td>");
-            sb.append("<td>").append(item.getQuantity()).append("</td>");
-            sb.append("<td>$").append(item.getLineTotal()).append("</td>");
-            sb.append("</tr>");
-        });
+        if (order.getItems() != null) {
+            order.getItems().forEach(item -> {
+                sb.append("<tr>");
+                sb.append("<td>").append(item.getProductName()).append("</td>");
+                sb.append("<td>").append(item.getQuantity()).append("</td>");
+                sb.append("<td>$").append(item.getLineTotal()).append("</td>");
+                sb.append("</tr>");
+            });
+        }
         
         sb.append("</table>");
         sb.append("<p><b>Total: $").append(order.getTotalAmount()).append("</b></p>");
         sb.append("</body></html>");
         return sb.toString();
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    private static String normalizeBase(String base) {
+        return base != null ? base.replaceAll("/+$", "") : "";
     }
 }
