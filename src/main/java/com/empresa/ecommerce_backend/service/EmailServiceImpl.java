@@ -1,8 +1,11 @@
 package com.empresa.ecommerce_backend.service;
 
+import com.empresa.ecommerce_backend.enums.PaymentMethod;
 import com.empresa.ecommerce_backend.exception.EmailSendingException;
+import com.empresa.ecommerce_backend.model.BankAccount;
 import com.empresa.ecommerce_backend.model.Order;
 import com.empresa.ecommerce_backend.model.Payment;
+import com.empresa.ecommerce_backend.repository.BankAccountRepository;
 import com.empresa.ecommerce_backend.service.interfaces.EmailService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +19,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -25,6 +29,7 @@ public class EmailServiceImpl implements EmailService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final BankAccountRepository bankAccountRepository;
 
     @Value("${resend.api-key}")
     private String resendApiKey;
@@ -47,24 +52,84 @@ public class EmailServiceImpl implements EmailService {
     @Async("mailExecutor")
     @Override
     public void sendOrderConfirmation(Order order) {
-        String subject = "Confirmación de Orden #" + order.getOrderNumber();
-        String body = buildOrderHtml(order, "¡Gracias por tu compra!", "Tu orden ha sido recibida y está siendo procesada.");
+        // Lógica condicional según método de pago
+        if (order.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
+            // 1. Enviar instrucciones de transferencia al usuario
+            sendBankTransferInstructions(order);
+            
+            // 2. Notificar al admin de nueva orden pendiente de transferencia
+            sendNewTransferOrderAdminNotification(order);
+        } else {
+            // Para MercadoPago u otros, NO enviamos email de confirmación inicial.
+            // Se enviará solo cuando el pago sea APROBADO (sendPaymentApprovedNotification).
+            log.info("Orden #{} creada con {}. Esperando aprobación de pago para enviar email.", 
+                    order.getOrderNumber(), order.getChosenPaymentMethod());
+        }
+    }
+
+    private void sendBankTransferInstructions(Order order) {
+        String subject = "Instrucciones de Transferencia - Orden #" + order.getOrderNumber();
+        List<BankAccount> accounts = bankAccountRepository.findByIsActiveTrue();
         
-        // Email al cliente
+        StringBuilder accountsHtml = new StringBuilder();
+        if (accounts.isEmpty()) {
+            accountsHtml.append("<p><i>No hay cuentas bancarias activas disponibles en este momento. Por favor contáctanos.</i></p>");
+        } else {
+            accountsHtml.append("<h3>Datos Bancarios:</h3>");
+            for (BankAccount acc : accounts) {
+                accountsHtml.append("<div style='border:1px solid #ddd; padding:10px; margin-bottom:10px; border-radius:5px;'>");
+                accountsHtml.append("<p><b>Banco:</b> ").append(acc.getBankName()).append("</p>");
+                accountsHtml.append("<p><b>Titular:</b> ").append(acc.getHolderName()).append("</p>");
+                accountsHtml.append("<p><b>CBU/CVU:</b> ").append(acc.getCbu()).append("</p>");
+                if (acc.getAlias() != null) accountsHtml.append("<p><b>Alias:</b> ").append(acc.getAlias()).append("</p>");
+                if (acc.getAccountNumber() != null) accountsHtml.append("<p><b>Nro Cuenta:</b> ").append(acc.getAccountNumber()).append("</p>");
+                if (acc.getCuil() != null) accountsHtml.append("<p><b>CUIL/CUIT:</b> ").append(acc.getCuil()).append("</p>");
+                if (acc.getAccountType() != null) accountsHtml.append("<p><b>Tipo:</b> ").append(acc.getAccountType()).append("</p>");
+                accountsHtml.append("</div>");
+            }
+        }
+
+        String body = """
+            <html>
+                <body style="font-family: Arial, sans-serif;">
+                    <h2>¡Gracias por tu compra!</h2>
+                    <p>Tu orden <b>#%s</b> ha sido creada exitosamente.</p>
+                    <p>Para finalizar, por favor realiza una transferencia bancaria por el total de <b>$%s</b> a cualquiera de las siguientes cuentas:</p>
+                    %s
+                    <hr/>
+                    <p>Una vez realizada la transferencia, por favor informanos el pago desde tu perfil o respondiendo a este correo con el comprobante.</p>
+                    <p><i>Tenés 48 horas para realizar el pago antes de que la orden expire.</i></p>
+                </body>
+            </html>
+        """.formatted(order.getOrderNumber(), order.getTotalAmount(), accountsHtml.toString());
+
         sendHtmlEmail(order.getUser().getEmail(), subject, body);
-        
-        // Copia al admin
+    }
+
+    private void sendNewTransferOrderAdminNotification(Order order) {
+        String subject = "[ADMIN] Nueva Orden por Transferencia - #" + order.getOrderNumber();
+        String body = """
+            <html>
+                <body style="font-family: Arial, sans-serif;">
+                    <h2>Nueva Orden por Transferencia</h2>
+                    <p>El usuario <b>%s</b> ha iniciado la orden <b>#%s</b> seleccionando Transferencia Bancaria.</p>
+                    <p><b>Monto Total:</b> $%s</p>
+                    <p>Estado actual: PENDIENTE DE PAGO</p>
+                </body>
+            </html>
+        """.formatted(order.getUser().getEmail(), order.getOrderNumber(), order.getTotalAmount());
+
         sendHtmlEmail(adminEmail, subject, body);
     }
 
     @Async("mailExecutor")
     @Override
     public void sendTransferPendingAdminNotification(Order order, Payment payment) {
-        String subject = "[ADMIN] Nueva Transferencia Informada - Orden #" + order.getOrderNumber();
-        String body = "<h1>Nueva Transferencia Informada</h1>" +
+        String subject = "[ADMIN] Transferencia Informada - Orden #" + order.getOrderNumber();
+        String body = "<h1>Transferencia Informada</h1>" +
                 "<p>El usuario ha informado una transferencia para la orden <b>" + order.getOrderNumber() + "</b>.</p>" +
                 "<ul>" +
-                "<li>Monto: $" + payment.getAmount() + "</li>" +
+                "<li>Monto Informado: $" + payment.getAmount() + "</li>" +
                 "<li>Referencia: " + payment.getTransferReference() + "</li>" +
                 "<li>Comprobante: <a href='" + (payment.getReceiptUrl() != null ? payment.getReceiptUrl() : "#") + "'>Ver Comprobante</a></li>" +
                 "</ul>" +
