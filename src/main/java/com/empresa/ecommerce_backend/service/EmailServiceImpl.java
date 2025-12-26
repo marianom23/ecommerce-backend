@@ -69,7 +69,7 @@ public class EmailServiceImpl implements EmailService {
 
     private void sendBankTransferInstructions(Order order) {
         String subject = "Instrucciones de Transferencia - Orden #" + order.getOrderNumber();
-        List<BankAccount> accounts = bankAccountRepository.findByIsActiveTrue();
+        List<BankAccount> accounts = bankAccountRepository.findByActiveTrue();
         
         StringBuilder accountsHtml = new StringBuilder();
         if (accounts.isEmpty()) {
@@ -159,7 +159,7 @@ public class EmailServiceImpl implements EmailService {
                 .fromHttpUrl(base)
                 .path(path)
                 .queryParam("token", token)
-                .build(true)
+                .build()
                 .toUriString();
 
         String htmlContent = """
