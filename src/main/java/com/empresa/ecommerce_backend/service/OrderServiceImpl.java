@@ -3,6 +3,7 @@ package com.empresa.ecommerce_backend.service;
 
 import com.empresa.ecommerce_backend.dto.request.ConfirmOrderRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateBillingProfileRequest;
+import com.empresa.ecommerce_backend.dto.request.UpdateOrderStatusRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdatePaymentMethodRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateShippingAddressRequest;
 import com.empresa.ecommerce_backend.dto.response.OrderResponse;
@@ -379,6 +380,62 @@ public class OrderServiceImpl implements OrderService {
             ProductVariant v = oi.getVariant();
             return !isDigital(v);
         });
+    }
+
+    // ====== PATCH Order Status (SHIPPED/DELIVERED) ======
+    @Override
+    @Transactional
+    public ServiceResult<OrderResponse> updateOrderStatus(Long orderId, UpdateOrderStatusRequest req) {
+        Long uid = currentUserId();
+        Order o = orderRepo.findByIdAndUserId(orderId, uid)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+
+        OrderStatus newStatus = req.getStatus();
+
+        // Validar que solo se puedan actualizar a SHIPPED o DELIVERED
+        if (newStatus != OrderStatus.SHIPPED && newStatus != OrderStatus.DELIVERED) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                    "Solo se puede actualizar el estado a SHIPPED o DELIVERED.");
+        }
+
+        // Validar transiciones de estado
+        OrderStatus currentStatus = o.getStatus();
+        
+        if (newStatus == OrderStatus.SHIPPED) {
+            // Para marcar como SHIPPED, debe estar en PAID
+            if (currentStatus != OrderStatus.PAID) {
+                return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                        "Solo se puede marcar como SHIPPED una orden que esté PAID.");
+            }
+            // No permitir SHIPPED si la orden es 100% digital
+            if (!requiresShipping(o)) {
+                return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                        "No se puede marcar como SHIPPED una orden completamente digital.");
+            }
+        } else if (newStatus == OrderStatus.DELIVERED) {
+            // Para marcar como DELIVERED:
+            // - Si requiere envío físico: debe estar en SHIPPED
+            // - Si es 100% digital: puede pasar directo de PAID
+            boolean isDigitalOnly = !requiresShipping(o);
+            
+            if (isDigitalOnly) {
+                // Para órdenes digitales: PAID -> DELIVERED
+                if (currentStatus != OrderStatus.PAID && currentStatus != OrderStatus.SHIPPED) {
+                    return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                            "Solo se puede marcar como DELIVERED una orden digital que esté PAID o SHIPPED.");
+                }
+            } else {
+                // Para órdenes físicas: debe estar SHIPPED
+                if (currentStatus != OrderStatus.SHIPPED) {
+                    return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                            "Solo se puede marcar como DELIVERED una orden física que esté SHIPPED.");
+                }
+            }
+        }
+
+        o.setStatus(newStatus);
+        Order saved = orderRepo.save(o);
+        return ServiceResult.ok(orderMapper.toResponse(saved));
     }
 
     // ⏳ Helper para expiración por método de pago

@@ -83,4 +83,10 @@ public class OrderController {
                                                 @RequestBody(required = false) ConfirmOrderRequest req) {
         return orderService.confirmOrder(id, req);
     }
+
+    @PatchMapping("/{id}/status")
+    public ServiceResult<OrderResponse> updateStatus(@PathVariable Long id,
+                                                      @Valid @RequestBody UpdateOrderStatusRequest req) {
+        return orderService.updateOrderStatus(id, req);
+    }
 }

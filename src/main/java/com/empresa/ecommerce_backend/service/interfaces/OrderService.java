@@ -3,6 +3,7 @@ package com.empresa.ecommerce_backend.service.interfaces;
 
 import com.empresa.ecommerce_backend.dto.request.ConfirmOrderRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateBillingProfileRequest;
+import com.empresa.ecommerce_backend.dto.request.UpdateOrderStatusRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdatePaymentMethodRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateShippingAddressRequest;
 import com.empresa.ecommerce_backend.dto.response.OrderResponse;
@@ -27,4 +28,5 @@ public interface OrderService {
     ServiceResult<OrderResponse> patchBillingProfile(Long orderId, UpdateBillingProfileRequest req);
     ServiceResult<OrderResponse> patchPaymentMethod(Long orderId, UpdatePaymentMethodRequest req);
     ServiceResult<OrderResponse> confirmOrder(Long orderId, ConfirmOrderRequest req);
+    ServiceResult<OrderResponse> updateOrderStatus(Long orderId, UpdateOrderStatusRequest req);
 }
