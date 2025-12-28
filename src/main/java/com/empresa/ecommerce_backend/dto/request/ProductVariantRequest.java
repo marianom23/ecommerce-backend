@@ -9,9 +9,6 @@ import java.math.BigDecimal;
 @NoArgsConstructor @AllArgsConstructor
 public class ProductVariantRequest {
 
-    @NotNull
-    private Long productId;               // a qué producto pertenece
-
     @NotBlank
     private String sku;                   // único por variante
 

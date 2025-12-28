@@ -42,11 +42,6 @@ public class ProductVariantServiceImpl implements ProductVariantService {
     @Override
     @Transactional
     public ServiceResult<ProductVariantResponse> create(Long productId, ProductVariantRequest req) {
-        // si usas req.productId, validar:
-        if (req.getProductId() != null && !req.getProductId().equals(productId)) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "productId del cuerpo no coincide con la URL.");
-        }
-
         var product = productRepository.findById(productId)
                 .orElseThrow(() -> new EntityNotFoundException("Producto no encontrado"));
 
