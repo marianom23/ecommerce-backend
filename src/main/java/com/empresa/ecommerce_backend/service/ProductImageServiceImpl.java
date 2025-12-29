@@ -100,4 +100,33 @@ public class ProductImageServiceImpl implements ProductImageService {
         }
         return ServiceResult.noContent();
     }
+
+    @Transactional
+    @Override
+    public ServiceResult<Void> reorderVariantImages(Long productId, Long variantId, List<Long> imageIdsInOrder) {
+        // Verificar que la variante existe y pertenece al producto
+        ProductVariant variant = variantRepo.findById(variantId)
+                .orElseThrow(() -> new EntityNotFoundException("Variant not found"));
+        
+        if (!Objects.equals(variant.getProduct().getId(), productId)) {
+            throw new IllegalArgumentException("Variant does not belong to product");
+        }
+
+        int pos = 1;
+        for (Long id : imageIdsInOrder) {
+            ProductImage img = imageRepo.findById(id)
+                    .orElseThrow(() -> new EntityNotFoundException("Image not found"));
+
+            // Verificar que la imagen pertenece a esta variante
+            if (!Objects.equals(img.getProduct().getId(), productId)) {
+                throw new IllegalArgumentException("Image does not belong to product");
+            }
+            if (img.getVariant() == null || !Objects.equals(img.getVariant().getId(), variantId)) {
+                throw new IllegalArgumentException("Image does not belong to variant");
+            }
+
+            img.setPosition(pos++);
+        }
+        return ServiceResult.noContent();
+    }
 }

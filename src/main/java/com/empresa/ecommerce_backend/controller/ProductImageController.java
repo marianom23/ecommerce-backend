@@ -49,4 +49,13 @@ public class ProductImageController {
             @RequestBody List<Long> imageIdsInOrder) {
         return imageAppService.reorderImages(productId, imageIdsInOrder);
     }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{productId}/variants/{variantId}/images/reorder")
+    public ServiceResult<Void> reorderVariantImages(
+            @PathVariable Long productId,
+            @PathVariable Long variantId,
+            @RequestBody List<Long> imageIdsInOrder) {
+        return imageAppService.reorderVariantImages(productId, variantId, imageIdsInOrder);
+    }
 }

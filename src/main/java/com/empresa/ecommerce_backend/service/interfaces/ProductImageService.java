@@ -15,6 +15,9 @@ public interface ProductImageService {
     // Borrar una imagen
     ServiceResult<Void> deleteImage(Long productId, Long imageId);
 
-    // Reordenar imágenes
+    // Reordenar imágenes del producto
     ServiceResult<Void> reorderImages(Long productId, List<Long> imageIdsInOrder);
+    
+    // Reordenar imágenes de una variante
+    ServiceResult<Void> reorderVariantImages(Long productId, Long variantId, List<Long> imageIdsInOrder);
 }
