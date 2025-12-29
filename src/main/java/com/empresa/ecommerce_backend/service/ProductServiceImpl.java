@@ -308,7 +308,26 @@ public class ProductServiceImpl implements ProductService {
             product.setBrand(null);
         }
 
+
         Product saved = productRepository.save(product);
         return ServiceResult.ok(productMapper.toResponse(saved));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<ProductAdminResponse> getProductForAdmin(Long id) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
+
+        ProductAdminResponse response = new ProductAdminResponse();
+        response.setId(product.getId());
+        response.setName(product.getName());
+        response.setDescription(product.getDescription());
+        response.setSku(product.getSku());
+        response.setBrandId(product.getBrand() != null ? product.getBrand().getId() : null);
+        response.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
+        response.setSoldCount(product.getSoldCount());
+
+        return ServiceResult.ok(response);
     }
 }

@@ -2,6 +2,7 @@ package com.empresa.ecommerce_backend.controller;
 
 import com.empresa.ecommerce_backend.dto.response.PageResponse;
 import com.empresa.ecommerce_backend.dto.response.ProductBackofficeResponse;
+import com.empresa.ecommerce_backend.dto.response.ProductAdminResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.service.interfaces.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -33,5 +34,10 @@ public class AdminProductController {
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sort));
         
         return productService.listForBackoffice(pageable, q);
+    }
+
+    @GetMapping("/{id}")
+    public ServiceResult<ProductAdminResponse> getProductForEdit(@PathVariable Long id) {
+        return productService.getProductForAdmin(id);
     }
 }
