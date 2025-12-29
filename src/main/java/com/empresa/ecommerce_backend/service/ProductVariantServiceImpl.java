@@ -49,40 +49,47 @@ public class ProductVariantServiceImpl implements ProductVariantService {
             return ServiceResult.error(HttpStatus.CONFLICT, "SKU de variante ya existe.");
         }
 
-        // Validación condicional
-        validateFulfillment(req);
-
         var v = mapper.toEntity(req);
         v.setProduct(product);
 
-        // Asegurar defaults si es digital
+        // Default type if null
+        if (v.getFulfillmentType() == null) {
+            v.setFulfillmentType(com.empresa.ecommerce_backend.enums.FulfillmentType.PHYSICAL);
+        }
+
+        sanitizeAndValidate(v);
+
+        var saved = variantRepository.save(v);
+        return ServiceResult.created(mapper.toResponse(saved));
+    }
+
+    private void sanitizeAndValidate(com.empresa.ecommerce_backend.model.ProductVariant v) {
+        // Logica para limpiar datos según el tipo
         if (v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND
             || v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_INSTANT) {
             v.setWeightKg(null);
             v.setLengthCm(null);
             v.setWidthCm(null);
             v.setHeightCm(null);
-            // Para DIGITAL_INSTANT quizás sí quieras controlar stock, pero para ON_DEMAND no.
-            // Dejemos que si viene null, se ponga en 0.
             if (v.getStock() == null) v.setStock(0);
         }
 
-        var saved = variantRepository.save(v);
-        return ServiceResult.created(mapper.toResponse(saved));
-    }
-
-    private void validateFulfillment(ProductVariantRequest req) {
-        // Default a PHYSICAL si viene null
-        if (req.getFulfillmentType() == null) {
-            req.setFulfillmentType(com.empresa.ecommerce_backend.enums.FulfillmentType.PHYSICAL);
-        }
-
-        if (req.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.PHYSICAL) {
-            if (req.getStock() == null) throw new IllegalArgumentException("Stock es requerido para productos físicos");
-            if (req.getWeightKg() == null) throw new IllegalArgumentException("Peso es requerido para productos físicos");
-            if (req.getLengthCm() == null) throw new IllegalArgumentException("Largo es requerido para productos físicos");
-            if (req.getWidthCm() == null) throw new IllegalArgumentException("Ancho es requerido para productos físicos");
-            if (req.getHeightCm() == null) throw new IllegalArgumentException("Alto es requerido para productos físicos");
+        // Validación
+        if (v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.PHYSICAL) {
+            if (v.getStock() == null || v.getStock() < 0)
+                 throw new IllegalArgumentException("Stock válido es requerido para productos físicos");
+            
+            if (v.getWeightKg() == null || v.getWeightKg().compareTo(java.math.BigDecimal.valueOf(0.001)) < 0) 
+                 throw new IllegalArgumentException("Peso (kg) requerido y mayor a 0.001");
+            
+            if (v.getLengthCm() == null || v.getLengthCm().compareTo(java.math.BigDecimal.valueOf(0.01)) < 0) 
+                 throw new IllegalArgumentException("Largo (cm) requerido y mayor a 0.01");
+            
+            if (v.getWidthCm() == null || v.getWidthCm().compareTo(java.math.BigDecimal.valueOf(0.01)) < 0) 
+                 throw new IllegalArgumentException("Ancho (cm) requerido y mayor a 0.01");
+            
+            if (v.getHeightCm() == null || v.getHeightCm().compareTo(java.math.BigDecimal.valueOf(0.01)) < 0) 
+                 throw new IllegalArgumentException("Alto (cm) requerido y mayor a 0.01");
         }
     }
 
@@ -98,6 +105,9 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         }
 
         mapper.updateEntityFromRequest(req, variant);
+        
+        sanitizeAndValidate(variant);
+        
         var saved = variantRepository.save(variant);
         return ServiceResult.ok(mapper.toResponse(saved));
     }

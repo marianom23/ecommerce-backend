@@ -22,16 +22,9 @@ public class ProductVariantRequest {
     private com.empresa.ecommerce_backend.enums.FulfillmentType fulfillmentType;
 
     // Logística (Andreani) - Opcionales (validado en Service si es PHYSICAL)
-    @DecimalMin(value = "0.001")  // kg
     private BigDecimal weightKg;
-
-    @DecimalMin(value = "0.01")   // cm
     private BigDecimal lengthCm;
-
-    @DecimalMin(value = "0.01")   // cm
     private BigDecimal widthCm;
-
-    @DecimalMin(value = "0.01")   // cm
     private BigDecimal heightCm;
 
     // Atributos (talle/color/etc.) si no los modelás aún
