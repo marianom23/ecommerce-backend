@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/api/admin/orders")
@@ -43,5 +44,12 @@ public class AdminOrderController {
     @GetMapping("/{id}")
     public ServiceResult<OrderResponse> getOrderById(@PathVariable Long id) {
         return orderService.getOrderByIdForAdmin(id);
+    }
+
+    @PatchMapping("/{id}/status")
+    public ServiceResult<OrderResponse> updateOrderStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody com.empresa.ecommerce_backend.dto.request.UpdateOrderStatusRequest req) {
+        return orderService.updateOrderStatusForAdmin(id, req);
     }
 }
