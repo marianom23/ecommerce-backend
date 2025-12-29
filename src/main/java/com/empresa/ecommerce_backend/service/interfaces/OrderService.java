@@ -6,10 +6,9 @@ import com.empresa.ecommerce_backend.dto.request.UpdateBillingProfileRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateOrderStatusRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdatePaymentMethodRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateShippingAddressRequest;
-import com.empresa.ecommerce_backend.dto.response.OrderResponse;
-import com.empresa.ecommerce_backend.dto.response.OrderSummaryResponse;
-import com.empresa.ecommerce_backend.dto.response.PageResponse;
-import com.empresa.ecommerce_backend.dto.response.ServiceResult;
+import com.empresa.ecommerce_backend.dto.response.*;
+import com.empresa.ecommerce_backend.enums.OrderStatus;
+import com.empresa.ecommerce_backend.enums.PaymentStatus;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
@@ -29,4 +28,8 @@ public interface OrderService {
     ServiceResult<OrderResponse> patchPaymentMethod(Long orderId, UpdatePaymentMethodRequest req);
     ServiceResult<OrderResponse> confirmOrder(Long orderId, ConfirmOrderRequest req);
     ServiceResult<OrderResponse> updateOrderStatus(Long orderId, UpdateOrderStatusRequest req);
+    
+    // Admin backoffice
+    ServiceResult<PageResponse<OrderBackofficeResponse>> listAllOrdersForBackoffice(
+            Pageable pageable, String search, OrderStatus orderStatus, PaymentStatus paymentStatus);
 }

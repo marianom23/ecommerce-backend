@@ -9,6 +9,7 @@ import com.empresa.ecommerce_backend.dto.request.UpdateShippingAddressRequest;
 import com.empresa.ecommerce_backend.dto.response.OrderResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.dto.response.OrderSummaryResponse;
+import com.empresa.ecommerce_backend.dto.response.OrderBackofficeResponse;
 import com.empresa.ecommerce_backend.dto.response.PageResponse;
 import com.empresa.ecommerce_backend.enums.FulfillmentType;
 import com.empresa.ecommerce_backend.enums.OrderStatus;
@@ -451,5 +452,67 @@ public class OrderServiceImpl implements OrderService {
             default ->
                     LocalDateTime.now().plusMinutes(30); // MP, Card, etc.
         };
+    }
+
+    // ====== Admin Backoffice: lista todas las órdenes ======
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<PageResponse<OrderBackofficeResponse>> listAllOrdersForBackoffice(
+            Pageable pageable, String search, com.empresa.ecommerce_backend.enums.OrderStatus orderStatus,
+            com.empresa.ecommerce_backend.enums.PaymentStatus paymentStatus) {
+        
+        // Construir especificaciones dinámicamente
+        org.springframework.data.jpa.domain.Specification<Order> spec = 
+                org.springframework.data.jpa.domain.Specification.where(null);
+        
+        // Filtro por búsqueda (order number o email usuario)
+        if (search != null && !search.isBlank()) {
+            String searchLower = search.toLowerCase().trim();
+            spec = spec.and((root, query, cb) -> {
+                jakarta.persistence.criteria.Join<Order, User> userJoin = root.join("user");
+                return cb.or(
+                    cb.like(cb.lower(root.get("orderNumber")), "%" + searchLower + "%"),
+                    cb.like(cb.lower(userJoin.get("email")), "%" + searchLower + "%")
+                );
+            });
+        }
+        
+        // Filtro por estado de orden
+        if (orderStatus != null) {
+            spec = spec.and((root, query, cb) -> 
+                cb.equal(root.get("status"), orderStatus));
+        }
+        
+        // Filtro por estado de pago
+        if (paymentStatus != null) {
+            spec = spec.and((root, query, cb) -> {
+                jakarta.persistence.criteria.Join<Order, Payment> paymentJoin = root.join("payment", jakarta.persistence.criteria.JoinType.LEFT);
+                return cb.equal(paymentJoin.get("status"), paymentStatus);
+            });
+        }
+        
+        // Ejecutar query
+        org.springframework.data.domain.Page<Order> page = orderRepo.findAll(spec, pageable);
+        
+        // Mapear a DTO
+        org.springframework.data.domain.Page<OrderBackofficeResponse> mapped = page.map(o -> {
+            OrderBackofficeResponse dto = new OrderBackofficeResponse();
+            dto.setId(o.getId());
+            dto.setOrderNumber(o.getOrderNumber());
+            dto.setUserEmail(o.getUser() != null ? o.getUser().getEmail() : null);
+            dto.setOrderDate(o.getOrderDate());
+            dto.setTotalAmount(o.getTotalAmount());
+            dto.setOrderStatus(o.getStatus());
+            
+            // Extraer payment info
+            if (o.getPayment() != null) {
+                dto.setPaymentStatus(o.getPayment().getStatus());
+                dto.setPaymentMethod(o.getPayment().getMethod() != null ? o.getPayment().getMethod().name() : null);
+            }
+            
+            return dto;
+        });
+        
+        return ServiceResult.ok(PageResponse.of(mapped));
     }
 }
