@@ -327,6 +327,17 @@ public class ProductServiceImpl implements ProductService {
         response.setBrandId(product.getBrand() != null ? product.getBrand().getId() : null);
         response.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
         response.setSoldCount(product.getSoldCount());
+        
+        // Mapear imágenes
+        List<ProductImageResponse> imageResponses = product.getImages().stream()
+                .map(img -> new ProductImageResponse(
+                        img.getId(),
+                        img.getUrl(),
+                        img.getPosition(),
+                        img.getVariant() != null ? img.getVariant().getId() : null
+                ))
+                .toList();
+        response.setImages(imageResponses);
 
         return ServiceResult.ok(response);
     }

@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -15,4 +17,5 @@ public class ProductAdminResponse {
     private Long brandId;
     private Long categoryId;
     private Long soldCount;
+    private List<ProductImageResponse> images;
 }
