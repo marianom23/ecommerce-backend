@@ -74,4 +74,12 @@ public class BannerServiceImpl implements BannerService {
         bannerRepository.deleteById(id);
         return ServiceResult.ok(null);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<BannerResponse> getById(Long id) {
+        Banner banner = bannerRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Banner no encontrado"));
+        return ServiceResult.ok(bannerMapper.toResponse(banner));
+    }
 }

@@ -28,6 +28,12 @@ public class BannerController {
         return bannerService.getActiveBanners(placement);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{id}")
+    public ServiceResult<BannerResponse> getById(@PathVariable Long id) {
+        return bannerService.getById(id);
+    }
+
     // Solo admin puede crear/editar banners
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping

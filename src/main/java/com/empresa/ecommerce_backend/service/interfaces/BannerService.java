@@ -17,4 +17,6 @@ public interface BannerService {
     ServiceResult<BannerResponse> update(Long id, BannerRequest request);
 
     ServiceResult<Void> delete(Long id);
+
+    ServiceResult<BannerResponse> getById(Long id);
 }
