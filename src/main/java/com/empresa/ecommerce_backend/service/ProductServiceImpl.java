@@ -328,13 +328,14 @@ public class ProductServiceImpl implements ProductService {
         response.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
         response.setSoldCount(product.getSoldCount());
         
-        // Mapear imágenes
+        // Mapear imágenes del producto base (sin variante)
         List<ProductImageResponse> imageResponses = product.getImages().stream()
+                .filter(img -> img.getVariant() == null)  // Solo imágenes del producto base
                 .map(img -> new ProductImageResponse(
                         img.getId(),
                         img.getUrl(),
                         img.getPosition(),
-                        img.getVariant() != null ? img.getVariant().getId() : null
+                        null  // variantId siempre null para producto base
                 ))
                 .toList();
         response.setImages(imageResponses);
