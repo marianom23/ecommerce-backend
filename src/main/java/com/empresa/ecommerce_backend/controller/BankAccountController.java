@@ -32,6 +32,12 @@ public class BankAccountController {
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{id}")
+    public ServiceResult<BankAccountResponse> getById(@PathVariable Long id) {
+        return service.getById(id);
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ServiceResult<BankAccountResponse> create(@RequestBody @Valid BankAccountRequest request) {
         return service.create(request);

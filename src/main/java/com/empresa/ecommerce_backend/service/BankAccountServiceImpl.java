@@ -40,6 +40,14 @@ public class BankAccountServiceImpl implements BankAccountService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<BankAccountResponse> getById(Long id) {
+        BankAccount account = repository.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Cuenta bancaria no encontrada"));
+        return ServiceResult.ok(mapper.toResponse(account));
+    }
+
+    @Override
     @Transactional
     public ServiceResult<BankAccountResponse> create(BankAccountRequest request) {
         BankAccount entity = mapper.toEntity(request);
