@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Getter
 @Builder
@@ -20,4 +21,5 @@ public class ProductVariantResponse {
     private final String attributesJson;
     private final FulfillmentType fulfillmentType;
     private final String onDemandUrl;
+    private final List<ProductImageResponse> images;
 }
