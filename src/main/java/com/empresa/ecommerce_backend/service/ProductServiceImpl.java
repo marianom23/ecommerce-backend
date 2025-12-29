@@ -247,13 +247,24 @@ public class ProductServiceImpl implements ProductService {
             }
             dto.setPrice(price);
             
-            // Stock total
-            int totalStock = 0;
-            if (p.getVariants() != null) {
-                totalStock = p.getVariants().stream()
-                        .filter(v -> v.getStock() != null)
-                        .mapToInt(v -> v.getStock())
-                        .sum();
+            // Stock total: considerar tipo de fulfillment
+            // Si tiene variantes digitales on-demand: stock ilimitado (-1)
+            // Si tiene variantes físicas o digitales instant: sumar stock real
+            Integer totalStock = null;
+            if (p.getVariants() != null && !p.getVariants().isEmpty()) {
+                boolean hasOnlyDigitalOnDemand = p.getVariants().stream()
+                        .allMatch(v -> v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND);
+                
+                if (hasOnlyDigitalOnDemand) {
+                    // Productos 100% digitales on-demand: always available
+                    totalStock = -1; // -1 indica stock ilimitado
+                } else {
+                    // Productos físicos o digitales instant: sumar stock
+                    totalStock = p.getVariants().stream()
+                            .filter(v -> v.getStock() != null)
+                            .mapToInt(v -> v.getStock())
+                            .sum();
+                }
             }
             dto.setTotalStock(totalStock);
             

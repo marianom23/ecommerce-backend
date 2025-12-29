@@ -452,8 +452,11 @@ public class PaymentServiceImpl implements PaymentService {
         o.getItems().forEach(oi -> {
             var v = oi.getVariant();
             if (v != null) {
-                v.setStock((v.getStock() == null ? 0 : v.getStock()) + oi.getQuantity());
-                variantRepo.save(v);
+                // NO devolver stock a productos digitales on-demand (tienen stock ilimitado)
+                if (v.getFulfillmentType() != com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND) {
+                    v.setStock((v.getStock() == null ? 0 : v.getStock()) + oi.getQuantity());
+                    variantRepo.save(v);
+                }
             }
         });
     }
