@@ -185,4 +185,84 @@ public class ProductServiceImpl implements ProductService {
         response.setAverageRating(avgRating);
         response.setTotalReviews(totalReviews);
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<PageResponse<ProductBackofficeResponse>> listForBackoffice(Pageable pageable, String searchQuery) {
+        Page<Product> page;
+        
+        if (searchQuery != null && !searchQuery.isBlank()) {
+            String queryPattern = "%" + searchQuery.toLowerCase().trim() + "%";
+            Specification<Product> spec = ProductSpecs.nameContains(searchQuery);
+            page = productRepository.findAll(spec, pageable);
+        } else {
+            page = productRepository.findAll(pageable);
+        }
+        
+        Page<ProductBackofficeResponse> mapped = page.map(p -> {
+            ProductBackofficeResponse dto = new ProductBackofficeResponse();
+            dto.setId(p.getId());
+            dto.setName(p.getName());
+            
+            // Thumbnail: primera imagen del producto o de la primera variante
+            String thumbnail = null;
+            if (p.getImages() != null && !p.getImages().isEmpty()) {
+                thumbnail = p.getImages().stream()
+                        .sorted((img1, img2) -> {
+                            Integer pos1 = img1.getPosition() != null ? img1.getPosition() : Integer.MAX_VALUE;
+                            Integer pos2 = img2.getPosition() != null ? img2.getPosition() : Integer.MAX_VALUE;
+                            return pos1.compareTo(pos2);
+                        })
+                        .findFirst()
+                        .map(img -> img.getUrl())
+                        .orElse(null);
+            }
+            if (thumbnail == null && p.getVariants() != null && !p.getVariants().isEmpty()) {
+                thumbnail = p.getVariants().stream()
+                        .filter(v -> v.getImages() != null && !v.getImages().isEmpty())
+                        .flatMap(v -> v.getImages().stream())
+                        .sorted((img1, img2) -> {
+                            Integer pos1 = img1.getPosition() != null ? img1.getPosition() : Integer.MAX_VALUE;
+                            Integer pos2 = img2.getPosition() != null ? img2.getPosition() : Integer.MAX_VALUE;
+                            return pos1.compareTo(pos2);
+                        })
+                        .findFirst()
+                        .map(img -> img.getUrl())
+                        .orElse(null);
+            }
+            dto.setThumbnail(thumbnail);
+            
+            // Category y Brand (nombres, no IDs)
+            dto.setCategoryName(p.getCategory() != null ? p.getCategory().getName() : null);
+            dto.setBrandName(p.getBrand() != null ? p.getBrand().getName() : null);
+            
+            // Precio representativo (más barato)
+            BigDecimal price = null;
+            if (p.getVariants() != null && !p.getVariants().isEmpty()) {
+                price = p.getVariants().stream()
+                        .map(v -> v.getPrice())
+                        .filter(pr -> pr != null)
+                        .min(BigDecimal::compareTo)
+                        .orElse(null);
+            }
+            dto.setPrice(price);
+            
+            // Stock total
+            int totalStock = 0;
+            if (p.getVariants() != null) {
+                totalStock = p.getVariants().stream()
+                        .filter(v -> v.getStock() != null)
+                        .mapToInt(v -> v.getStock())
+                        .sum();
+            }
+            dto.setTotalStock(totalStock);
+            
+            // Cantidad de variantes
+            dto.setVariantCount(p.getVariants() != null ? p.getVariants().size() : 0);
+            
+            return dto;
+        });
+        
+        return ServiceResult.ok(PageResponse.of(mapped));
+    }
 }
