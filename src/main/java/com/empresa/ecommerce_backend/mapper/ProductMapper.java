@@ -110,8 +110,8 @@ public interface ProductMapper {
     /** Construye DTO de imágenes (solo imágenes del producto, no de variantes) */
     default ProductResponse.ImagesDto buildImages(Product p) {
         List<String> all = p.getImages().stream()
-                .sorted(Comparator.comparing(ProductImage::getPosition,
-                        Comparator.nullsLast(Integer::compareTo)))
+                .sorted(Comparator.comparing((ProductImage img) -> img.getVariant() != null) // false (null) va primero
+                        .thenComparing(ProductImage::getPosition, Comparator.nullsLast(Integer::compareTo)))
                 .map(ProductImage::getUrl)
                 .toList();
 
