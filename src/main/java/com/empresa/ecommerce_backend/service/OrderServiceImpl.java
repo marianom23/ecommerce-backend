@@ -515,4 +515,12 @@ public class OrderServiceImpl implements OrderService {
         
         return ServiceResult.ok(PageResponse.of(mapped));
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<OrderResponse> getOrderByIdForAdmin(Long orderId) {
+        Order order = orderRepo.findById(orderId)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        return ServiceResult.ok(orderMapper.toResponse(order));
+    }
 }

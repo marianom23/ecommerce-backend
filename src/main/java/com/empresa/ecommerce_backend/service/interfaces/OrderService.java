@@ -32,4 +32,5 @@ public interface OrderService {
     // Admin backoffice
     ServiceResult<PageResponse<OrderBackofficeResponse>> listAllOrdersForBackoffice(
             Pageable pageable, String search, OrderStatus orderStatus, PaymentStatus paymentStatus);
+    ServiceResult<OrderResponse> getOrderByIdForAdmin(Long orderId);
 }

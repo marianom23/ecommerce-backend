@@ -1,6 +1,7 @@
 package com.empresa.ecommerce_backend.controller;
 
 import com.empresa.ecommerce_backend.dto.response.OrderBackofficeResponse;
+import com.empresa.ecommerce_backend.dto.response.OrderResponse;
 import com.empresa.ecommerce_backend.dto.response.PageResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.enums.OrderStatus;
@@ -37,5 +38,10 @@ public class AdminOrderController {
         Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sort));
         
         return orderService.listAllOrdersForBackoffice(pageable, search, orderStatus, paymentStatus);
+    }
+
+    @GetMapping("/{id}")
+    public ServiceResult<OrderResponse> getOrderById(@PathVariable Long id) {
+        return orderService.getOrderByIdForAdmin(id);
     }
 }
