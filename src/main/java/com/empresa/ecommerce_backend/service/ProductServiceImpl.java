@@ -7,6 +7,8 @@ import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.ProductMapper;
 import com.empresa.ecommerce_backend.mapper.ProductPageMapper;
 import com.empresa.ecommerce_backend.model.Product;
+import com.empresa.ecommerce_backend.model.Category;
+import com.empresa.ecommerce_backend.model.Brand;
 import com.empresa.ecommerce_backend.repository.BrandRepository;
 import com.empresa.ecommerce_backend.repository.CategoryRepository;
 import com.empresa.ecommerce_backend.repository.ProductRepository;
@@ -275,5 +277,38 @@ public class ProductServiceImpl implements ProductService {
         });
         
         return ServiceResult.ok(PageResponse.of(mapped));
+    }
+
+    @Override
+    @Transactional
+    public ServiceResult<ProductResponse> updateProduct(Long id, ProductRequest request) {
+        Product product = productRepository.findById(id)
+                .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
+
+        // Actualizar campos básicos
+        product.setName(request.getName());
+        product.setDescription(request.getDescription());
+        product.setSku(request.getSku());
+        
+        // Actualizar categoría si viene
+        if (request.getCategoryId() != null) {
+            Category category = categoryRepository.findById(request.getCategoryId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Categoría no encontrada"));
+            product.setCategory(category);
+        } else {
+            product.setCategory(null);
+        }
+        
+        // Actualizar marca si viene
+        if (request.getBrandId() != null) {
+            Brand brand = brandRepository.findById(request.getBrandId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Marca no encontrada"));
+            product.setBrand(brand);
+        } else {
+            product.setBrand(null);
+        }
+
+        Product saved = productRepository.save(product);
+        return ServiceResult.ok(productMapper.toResponse(saved));
     }
 }

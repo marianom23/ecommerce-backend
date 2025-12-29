@@ -29,6 +29,14 @@ public class ProductController {
         return productService.createProduct(dto); // -> 201 Created (ServiceResult.created)
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/{id}")
+    public ServiceResult<ProductResponse> updateProduct(
+            @PathVariable Long id,
+            @RequestBody @Valid ProductRequest request) {
+        return productService.updateProduct(id, request);
+    }
+
     // GET /api/products
     @GetMapping(params = "!page")
     public ServiceResult<List<ProductResponse>> getAllProducts() {

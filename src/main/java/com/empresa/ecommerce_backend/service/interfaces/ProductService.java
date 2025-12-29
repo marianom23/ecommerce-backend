@@ -16,4 +16,5 @@ public interface ProductService {
     
     // Admin backoffice
     ServiceResult<PageResponse<ProductBackofficeResponse>> listForBackoffice(Pageable pageable, String searchQuery);
+    ServiceResult<ProductResponse> updateProduct(Long id, ProductRequest request);
 }
