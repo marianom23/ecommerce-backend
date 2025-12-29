@@ -95,6 +95,11 @@ public class ProductImageServiceImpl implements ProductImageService {
                 throw new IllegalArgumentException("Image does not belong to product");
             }
 
+            // Asegurar que es una imagen del producto base (sin variante)
+            if (img.getVariant() != null) {
+                throw new IllegalArgumentException("Image belongs to a variant, not the base product");
+            }
+
             img.setPosition(pos++);
             // al estar en contexto de persistencia, con @Transactional no hace falta save explícito
         }
