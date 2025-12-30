@@ -93,7 +93,8 @@ public interface ProductDetailsMapper {
         List<String> all = (p != null && p.getImages() != null)
                 ? p.getImages().stream()
                 .filter(Objects::nonNull)
-                .sorted(Comparator.comparing(ProductImage::getPosition, Comparator.nullsLast(Integer::compareTo)))
+                .sorted(Comparator.comparing((ProductImage img) -> img.getVariant() != null) // Base (null) primero
+                        .thenComparing(ProductImage::getPosition, Comparator.nullsLast(Integer::compareTo)))
                 .map(ProductImage::getUrl)
                 .filter(Objects::nonNull)
                 .toList()
