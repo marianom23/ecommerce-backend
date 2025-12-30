@@ -116,8 +116,7 @@ public interface ProductMapper {
                 .toList();
 
         ProductResponse.ImagesDto imgs = new ProductResponse.ImagesDto();
-        imgs.setThumbnails(all.stream().limit(4).toList());
-        imgs.setPreviews(all);
+        imgs.setUrls(all);
         return imgs;
     }
 

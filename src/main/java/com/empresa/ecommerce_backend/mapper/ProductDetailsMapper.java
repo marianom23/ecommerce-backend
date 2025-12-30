@@ -101,8 +101,7 @@ public interface ProductDetailsMapper {
                 : List.of();
 
         ProductDetailsResponse.ImagesDto imgs = new ProductDetailsResponse.ImagesDto();
-        imgs.setThumbnails(all.stream().limit(4).toList());
-        imgs.setPreviews(all);
+        imgs.setUrls(all);
         return imgs;
     }
 
@@ -118,8 +117,7 @@ public interface ProductDetailsMapper {
                 : List.of();
 
         ProductDetailsResponse.ImagesDto imgs = new ProductDetailsResponse.ImagesDto();
-        imgs.setThumbnails(all.stream().limit(4).toList());
-        imgs.setPreviews(all);
+        imgs.setUrls(all);
         return imgs;
     }
 

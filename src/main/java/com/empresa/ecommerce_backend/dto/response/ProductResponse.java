@@ -21,7 +21,6 @@ public class ProductResponse {
 
     @Data
     public static class ImagesDto {
-        private List<String> thumbnails;
-        private List<String> previews;
+        private List<String> urls;
     }
 }
