@@ -129,7 +129,8 @@ public class SecurityConfig {
                 "http://localhost:3000",
                 "https://ecommerce-frontend-ebon-omega.vercel.app",
                 "https://hornerotech.com.ar",
-                "https://www.hornerotech.com.ar"
+                "https://www.hornerotech.com.ar",
+                "https://ecommerce-backoffice-alpha.vercel.app"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
