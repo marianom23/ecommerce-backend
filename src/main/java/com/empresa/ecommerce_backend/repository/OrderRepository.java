@@ -82,4 +82,19 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select o from Order o where o.id = :id")
     Optional<Order> findByIdWithLock(@Param("id") Long id);
+
+    @Query("SELECT o.shippingAddress.state, COUNT(o), SUM(o.totalAmount) " +
+           "FROM Order o " +
+           "WHERE o.status <> 'CANCELLED' " +
+           "AND o.shippingAddress.state IS NOT NULL " +
+           "GROUP BY o.shippingAddress.state " +
+           "ORDER BY SUM(o.totalAmount) DESC")
+    List<Object[]> countAndSumByState();
+
+    @Query("SELECT FUNCTION('MONTH', o.orderDate), FUNCTION('YEAR', o.orderDate), COUNT(o), SUM(o.totalAmount) " +
+           "FROM Order o " +
+           "WHERE o.status <> 'CANCELLED' " +
+           "GROUP BY FUNCTION('YEAR', o.orderDate), FUNCTION('MONTH', o.orderDate) " +
+           "ORDER BY FUNCTION('YEAR', o.orderDate) DESC, FUNCTION('MONTH', o.orderDate) DESC")
+    List<Object[]> findMonthlySales();
 }

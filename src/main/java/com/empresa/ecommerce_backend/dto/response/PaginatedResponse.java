@@ -19,4 +19,14 @@ public class PaginatedResponse<T> {
     private boolean hasPrevious;// hay páginas antes
     private String sort;        // criterio de orden actual (opcional)
     private String query;       // texto de búsqueda (opcional)
+
+    public PaginatedResponse(List<T> items, int page, int pageSize, long total, int totalPages) {
+        this.items = items;
+        this.page = page;
+        this.pageSize = pageSize;
+        this.total = total;
+        this.totalPages = totalPages;
+        this.hasNext = page < totalPages;
+        this.hasPrevious = page > 1;
+    }
 }
