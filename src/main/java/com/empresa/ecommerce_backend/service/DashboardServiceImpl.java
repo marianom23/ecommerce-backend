@@ -32,8 +32,8 @@ public class DashboardServiceImpl implements DashboardService {
         com.empresa.ecommerce_backend.dto.response.DashboardStatsDTO stats = new com.empresa.ecommerce_backend.dto.response.DashboardStatsDTO();
 
         try {
-            // 1. Clientes Totales
-            long totalCustomers = userRepository.countByRoles_Name("ROLE_USER");
+            // 1. Customers = Total usuarios registrados
+            long totalCustomers = userRepository.count();
             stats.setTotalCustomers(totalCustomers);
         } catch (Exception e) {
             stats.setTotalCustomers(0L);
