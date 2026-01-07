@@ -91,10 +91,10 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
            "ORDER BY SUM(o.totalAmount) DESC")
     List<Object[]> countAndSumByState();
 
-    @Query("SELECT FUNCTION('MONTH', o.orderDate), FUNCTION('YEAR', o.orderDate), COUNT(o), SUM(o.totalAmount) " +
+    @Query("SELECT EXTRACT(MONTH FROM o.orderDate), EXTRACT(YEAR FROM o.orderDate), COUNT(o), SUM(o.totalAmount) " +
            "FROM Order o " +
            "WHERE o.status <> 'CANCELLED' " +
-           "GROUP BY FUNCTION('YEAR', o.orderDate), FUNCTION('MONTH', o.orderDate) " +
-           "ORDER BY FUNCTION('YEAR', o.orderDate) DESC, FUNCTION('MONTH', o.orderDate) DESC")
+           "GROUP BY EXTRACT(YEAR FROM o.orderDate), EXTRACT(MONTH FROM o.orderDate) " +
+           "ORDER BY EXTRACT(YEAR FROM o.orderDate) DESC, EXTRACT(MONTH FROM o.orderDate) DESC")
     List<Object[]> findMonthlySales();
 }
