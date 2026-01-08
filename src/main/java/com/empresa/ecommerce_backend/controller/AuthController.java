@@ -54,9 +54,14 @@ public class AuthController {
             
             metaPixelService.sendEvent(
                 "CompleteRegistration",
-                request,
+                metaPixelService.extractClientIp(request),
+                request.getHeader("User-Agent"),
+                request.getRequestURL().toString(),
+                metaPixelService.extractFbpFbc(request),
                 tempUser,
-                null // No value for registration
+                null,
+                "ARS",
+                null // No deduplication ID for registration yet
             );
         }
         

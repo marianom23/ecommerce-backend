@@ -47,11 +47,14 @@ public class PaymentController {
             OrderResponse order = result.getData();
             metaPixelService.sendEvent(
                 "Purchase",
-                request,
-                null, // Admin action, no user context
+                metaPixelService.extractClientIp(request),
+                request.getHeader("User-Agent"),
+                request.getRequestURL().toString(),
+                metaPixelService.extractFbpFbc(request),
+                null, // Admin action
                 order.getTotalAmount().doubleValue(),
                 "ARS",
-                "order-" + order.getOrderNumber() // Event ID for deduplication
+                "order-" + order.getOrderNumber()
             );
         }
         
@@ -83,11 +86,14 @@ public class PaymentController {
         if (order != null) {
             metaPixelService.sendEvent(
                 "Purchase",
-                request,
+                metaPixelService.extractClientIp(request),
+                request.getHeader("User-Agent"),
+                request.getRequestURL().toString(),
+                metaPixelService.extractFbpFbc(request),
                 order.getUser(),
                 order.getTotalAmount().doubleValue(),
                 "ARS",
-                "order-" + order.getOrderNumber() // Event ID for deduplication
+                "order-" + order.getOrderNumber()
             );
         }
         

@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -41,17 +42,28 @@ public class MetaPixelService {
      * @param currency  Moneda (ej: "ARS")
      * @param eventId   ID único para deduplicación con frontend (opcional)
      */
+    /**
+     * Envía un evento a Meta Conversions API de forma asíncrona.
+     * EVITA pasar HttpServletRequest a métodos Async para prevenir condiciones de carrera.
+     */
     @Async
-    public void sendEvent(String eventName, HttpServletRequest request, User user, 
-                          Double value, String currency, String eventId) {
+    public void sendEvent(String eventName, 
+                          String clientIp, 
+                          String userAgent, 
+                          String sourceUrl,
+                          List<String> fbpFbcCookies, // [fbp, fbc] values or null
+                          User user, 
+                          Double value, 
+                          String currency, 
+                          String eventId) {
         try {
             APIContext context = new APIContext(accessToken);
             if (testMode) context.enableDebug(true);
 
             // 1. Datos del Usuario
             UserData userData = new UserData()
-                    .clientIpAddress(extractClientIp(request))
-                    .clientUserAgent(request.getHeader("User-Agent"));
+                    .clientIpAddress(clientIp)
+                    .clientUserAgent(userAgent);
 
             // Email hasheado (si hay usuario)
             if (user != null && user.getEmail() != null) {
@@ -59,16 +71,12 @@ public class MetaPixelService {
                 userData.emails(Arrays.asList(hashedEmail));
             }
 
-            // Cookies de Facebook (_fbp, _fbc)
-            if (request.getCookies() != null) {
-                for (Cookie cookie : request.getCookies()) {
-                    if ("_fbp".equals(cookie.getName())) {
-                        userData.fbp(cookie.getValue());
-                    }
-                    if ("_fbc".equals(cookie.getName())) {
-                        userData.fbc(cookie.getValue());
-                    }
-                }
+            // Cookies de Facebook pasadas explícitamente
+            if (fbpFbcCookies != null && fbpFbcCookies.size() >= 1 && fbpFbcCookies.get(0) != null) {
+                userData.fbp(fbpFbcCookies.get(0));
+            }
+            if (fbpFbcCookies != null && fbpFbcCookies.size() >= 2 && fbpFbcCookies.get(1) != null) {
+                userData.fbc(fbpFbcCookies.get(1));
             }
 
             // 2. Crear el Evento
@@ -76,7 +84,7 @@ public class MetaPixelService {
             event.eventName(eventName);
             event.eventTime(System.currentTimeMillis() / 1000L); // Unix timestamp
             event.userData(userData);
-            event.eventSourceUrl(request.getRequestURL().toString());
+            event.eventSourceUrl(sourceUrl);
             event.actionSource(ActionSource.website);
 
             // Event ID para deduplicación
@@ -110,11 +118,33 @@ public class MetaPixelService {
     }
 
     /**
-     * Versión simplificada sin eventId
+     * Helper para extraer IP del request de forma segura (síncrona).
      */
-    @Async
-    public void sendEvent(String eventName, HttpServletRequest request, User user, Double value) {
-        sendEvent(eventName, request, user, value, "ARS", null);
+    public String extractClientIp(HttpServletRequest request) {
+        String ip = request.getHeader("X-Forwarded-For");
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("X-Real-IP");
+        }
+        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr();
+        }
+        // Si hay múltiples IPs (proxy chain), tomar la primera
+        if (ip != null && ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+        return ip;
+    }
+    
+    public List<String> extractFbpFbc(HttpServletRequest request) {
+        String fbp = null;
+        String fbc = null;
+        if (request.getCookies() != null) {
+            for (Cookie cookie : request.getCookies()) {
+                if ("_fbp".equals(cookie.getName())) fbp = cookie.getValue();
+                if ("_fbc".equals(cookie.getName())) fbc = cookie.getValue();
+            }
+        }
+        return Arrays.asList(fbp, fbc);
     }
 
     /**
@@ -137,21 +167,4 @@ public class MetaPixelService {
         }
     }
 
-    /**
-     * Extrae IP del request (considera X-Forwarded-For para proxies/load balancers)
-     */
-    private String extractClientIp(HttpServletRequest request) {
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("X-Real-IP");
-        }
-        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr();
-        }
-        // Si hay múltiples IPs (proxy chain), tomar la primera
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-        return ip;
-    }
 }

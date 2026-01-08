@@ -86,7 +86,10 @@ public class CartController {
             // No enviamos info del usuario para AddToCart (privacy-first)
             metaPixelService.sendEvent(
                 "AddToCart",
-                request,
+                metaPixelService.extractClientIp(request),
+                request.getHeader("User-Agent"),
+                request.getRequestURL().toString(),
+                metaPixelService.extractFbpFbc(request),
                 null,
                 null, // No value for AddToCart
                 "ARS",
