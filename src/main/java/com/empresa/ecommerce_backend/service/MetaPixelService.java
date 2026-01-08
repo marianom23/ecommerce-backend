@@ -28,6 +28,9 @@ public class MetaPixelService {
     @Value("${meta.test-mode:false}")
     private boolean testMode;
 
+    @Value("${META_TEST_CODE:}")
+    private String testCode;
+
     /**
      * Envía un evento a Meta Conversions API de forma asíncrona.
      *
@@ -93,8 +96,8 @@ public class MetaPixelService {
             EventRequest eventRequest = new EventRequest(pixelId, context);
             eventRequest.addDataItem(event);
 
-            if (testMode) {
-                eventRequest.testEventCode("TEST12345"); // Para ver en Test Events
+            if (testMode && testCode != null && !testCode.isEmpty()) {
+                eventRequest.testEventCode(testCode); // Para ver en Test Events
             }
 
             EventResponse response = eventRequest.execute();
