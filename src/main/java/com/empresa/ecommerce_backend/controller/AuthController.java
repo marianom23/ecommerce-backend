@@ -235,6 +235,21 @@ public class AuthController {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
+        // 🔥 FIX: Asegurar que el carrito esté linkeado al usuario al refrescar
+        // Esto actúa como fallback si el login no completó el attach correctamente
+        String cookieSessionId = null;
+        if (request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie c : request.getCookies()) {
+                if ("cart_session".equals(c.getName())) {
+                    cookieSessionId = c.getValue();
+                    break;
+                }
+            }
+        }
+        if (cookieSessionId != null && !cookieSessionId.isBlank()) {
+            cartService.attachCartToUser(cookieSessionId, userId);
+        }
+
         List<String> roles = user.getRoles().stream()
                 .map(r -> r.getName().name())
                 .toList();
