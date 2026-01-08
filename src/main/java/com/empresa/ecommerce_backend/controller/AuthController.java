@@ -34,6 +34,7 @@ public class AuthController {
     private final RefreshTokenCookieManager refreshTokenCookieManager;
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final com.empresa.ecommerce_backend.service.interfaces.CartService cartService;
 
     /* -------- Registro -------- */
     @PostMapping("/register")
@@ -57,12 +58,32 @@ public class AuthController {
         String ip = extractClientIp(servletRequest);
         ServiceResult<LoginResponse> result = userServiceImpl.login(request, ip);
 
-        // Si login exitoso, generar access + refresh tokens
+        // Si login exitoso, generar access + refresh tokens Y fusionar carrito
         if (result.getData() != null
                 && result.getStatus() != null
                 && result.getStatus().is2xxSuccessful()) {
             
             LoginResponse data = result.getData();
+            
+            // 🛒 FUSIONAR CARRITO: Leer sessionId de header o cookie
+            String guestSessionId = servletRequest.getHeader("X-Cart-Session");
+            if (guestSessionId == null || guestSessionId.isBlank()) {
+                // Fallback a cookie si no hay header
+                jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
+                if (cookies != null) {
+                    for (jakarta.servlet.http.Cookie cookie : cookies) {
+                        if ("cart_session".equals(cookie.getName())) {
+                            guestSessionId = cookie.getValue();
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Fusionar carrito guest con usuario
+            if (guestSessionId != null && !guestSessionId.isBlank()) {
+                cartService.attachCartToUser(guestSessionId, data.getId());
+            }
             
             // Generar access token (15 min)
             String accessToken = jwtService.generateAccessToken(data.getId(), data.getEmail(), data.getRoles());
@@ -89,12 +110,30 @@ public class AuthController {
         ServiceResult<LoginResponse> result =
                 oAuth2UserProcessor.processFromFrontendOAuthCallback(dto, ip);
 
-        // OAuth también usa dual-token
+        // OAuth también usa dual-token Y fusión de carrito
         if (result.getData() != null
                 && result.getStatus() != null
                 && result.getStatus().is2xxSuccessful()) {
             
             LoginResponse data = result.getData();
+            
+            // 🛒 FUSIONAR CARRITO: Misma lógica que login normal
+            String guestSessionId = servletRequest.getHeader("X-Cart-Session");
+            if (guestSessionId == null || guestSessionId.isBlank()) {
+                jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
+                if (cookies != null) {
+                    for (jakarta.servlet.http.Cookie cookie : cookies) {
+                        if ("cart_session".equals(cookie.getName())) {
+                            guestSessionId = cookie.getValue();
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            if (guestSessionId != null && !guestSessionId.isBlank()) {
+                cartService.attachCartToUser(guestSessionId, data.getId());
+            }
             
             // Generar access token (15 min)
             String accessToken = jwtService.generateAccessToken(data.getId(), data.getEmail(), data.getRoles());
