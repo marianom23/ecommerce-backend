@@ -24,7 +24,7 @@ public class RefreshTokenCookieManager {
                 .maxAge(Duration.ofDays(7));
 
         if (cookieDomain != null && !cookieDomain.isBlank()) {
-            builder.domain(cookieDomain); // 👈 Setea dominio compartido
+            builder.domain(cookieDomain);
         }
 
         if (prod) {

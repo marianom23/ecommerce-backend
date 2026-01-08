@@ -31,11 +31,12 @@ public class CartController {
     @PostMapping("/attach")
     public ServiceResult<CartResponse> attachToUser(
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         Long userId = me.getId();
         var result = cartService.attachCartToUser(sessionId, userId);
         cookieManager.maybeSetSessionCookie(sessionId, result, request, response);
@@ -46,11 +47,12 @@ public class CartController {
     @GetMapping("/me")
     public ServiceResult<CartResponse> getMyCart(
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         // ✅ Si hay usuario autenticado, obtener SU carrito (la fusión ya pasó en login)
         if (me != null) {
             Long userId = me.getId();
@@ -69,11 +71,12 @@ public class CartController {
     public ServiceResult<CartResponse> addItem(
             @Valid @RequestBody AddItemRequest dto,
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me,
             HttpServletRequest request,
             HttpServletResponse response
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         Long userId = (me != null) ? me.getId() : null;
         var result = cartService.addItem(userId, sessionId, dto);
         cookieManager.maybeSetSessionCookie(sessionId, result, request, response);
@@ -103,9 +106,10 @@ public class CartController {
             @PathVariable Long itemId,
             @Valid @RequestBody UpdateQtyRequest dto,
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         Long userId = (me != null) ? me.getId() : null;
         return cartService.updateQuantity(userId, sessionId, itemId, dto);
     }
@@ -115,9 +119,10 @@ public class CartController {
     public ServiceResult<CartResponse> incrementItem(
             @PathVariable Long itemId,
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         Long userId = (me != null) ? me.getId() : null;
         return cartService.incrementItem(userId, sessionId, itemId);
     }
@@ -127,9 +132,10 @@ public class CartController {
     public ServiceResult<CartResponse> decrementItem(
             @PathVariable Long itemId,
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         Long userId = (me != null) ? me.getId() : null;
         return cartService.decrementItem(userId, sessionId, itemId);
     }
@@ -139,9 +145,10 @@ public class CartController {
     public ServiceResult<CartResponse> removeItem(
             @PathVariable Long itemId,
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         Long userId = (me != null) ? me.getId() : null;
         return cartService.removeItem(userId, sessionId, itemId);
     }
@@ -150,10 +157,19 @@ public class CartController {
     @DeleteMapping
     public ServiceResult<CartResponse> clear(
             @CookieValue(value = CartCookieManager.CART_COOKIE, required = false) String cookieSessionId,
+            @RequestHeader(value = "X-Cart-Session", required = false) String headerSessionId,
             @AuthenticationPrincipal AuthUser me
     ) {
-        String sessionId = cookieSessionId;
+        String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
         Long userId = (me != null) ? me.getId() : null;
         return cartService.clear(userId, sessionId);
+    }
+
+    /**
+     * Resuelve el sessionId con prioridad: header > cookie
+     * Esto permite funcionar en modo incógnito (donde las cookies fallan)
+     */
+    private String resolveSessionId(String headerSessionId, String cookieSessionId) {
+        return headerSessionId != null ? headerSessionId : cookieSessionId;
     }
 }
