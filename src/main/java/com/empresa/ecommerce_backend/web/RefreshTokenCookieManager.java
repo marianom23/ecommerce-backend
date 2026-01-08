@@ -12,6 +12,9 @@ public class RefreshTokenCookieManager {
 
     public static final String REFRESH_COOKIE = "refresh_token";
 
+    @org.springframework.beans.factory.annotation.Value("${app.cookie.domain:}")
+    private String cookieDomain;
+
     public void setRefreshCookie(HttpServletResponse response, String token, boolean secureRequest) {
         boolean prod = isProd();
         
@@ -19,6 +22,10 @@ public class RefreshTokenCookieManager {
                 .httpOnly(true)
                 .path("/")
                 .maxAge(Duration.ofDays(7));
+
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            builder.domain(cookieDomain); // 👈 Setea dominio compartido
+        }
 
         if (prod) {
             builder.secure(true).sameSite("None");
@@ -36,6 +43,10 @@ public class RefreshTokenCookieManager {
                 .httpOnly(true)
                 .path("/")
                 .maxAge(0);
+
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            builder.domain(cookieDomain);
+        }
 
         if (prod) {
             builder.secure(true).sameSite("None");

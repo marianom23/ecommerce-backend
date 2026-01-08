@@ -91,17 +91,14 @@ public class AuthController {
             
             LoginResponse data = result.getData();
             
-            // 🛒 FUSIONAR CARRITO: Leer sessionId de header o cookie
-            String guestSessionId = servletRequest.getHeader("X-Cart-Session");
-            if (guestSessionId == null || guestSessionId.isBlank()) {
-                // Fallback a cookie si no hay header
-                jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
-                if (cookies != null) {
-                    for (jakarta.servlet.http.Cookie cookie : cookies) {
-                        if ("cart_session".equals(cookie.getName())) {
-                            guestSessionId = cookie.getValue();
-                            break;
-                        }
+            // 🛒 FUSIONAR CARRITO: Leer sessionId de cookie
+            String guestSessionId = null;
+            jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
+            if (cookies != null) {
+                for (jakarta.servlet.http.Cookie cookie : cookies) {
+                    if ("cart_session".equals(cookie.getName())) {
+                        guestSessionId = cookie.getValue();
+                        break;
                     }
                 }
             }
@@ -144,15 +141,13 @@ public class AuthController {
             LoginResponse data = result.getData();
             
             // 🛒 FUSIONAR CARRITO: Misma lógica que login normal
-            String guestSessionId = servletRequest.getHeader("X-Cart-Session");
-            if (guestSessionId == null || guestSessionId.isBlank()) {
-                jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
-                if (cookies != null) {
-                    for (jakarta.servlet.http.Cookie cookie : cookies) {
-                        if ("cart_session".equals(cookie.getName())) {
-                            guestSessionId = cookie.getValue();
-                            break;
-                        }
+            String guestSessionId = null;
+            jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
+            if (cookies != null) {
+                for (jakarta.servlet.http.Cookie cookie : cookies) {
+                    if ("cart_session".equals(cookie.getName())) {
+                        guestSessionId = cookie.getValue();
+                        break;
                     }
                 }
             }
