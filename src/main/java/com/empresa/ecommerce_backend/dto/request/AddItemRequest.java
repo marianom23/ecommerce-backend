@@ -11,4 +11,5 @@ public class AddItemRequest {
     @NotNull private Long productId;
     private Long variantId;
     @NotNull @Min(1) private Integer quantity;
+    private String eventId; // For Meta Deduplication
 }

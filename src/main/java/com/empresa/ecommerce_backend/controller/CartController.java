@@ -88,7 +88,9 @@ public class CartController {
                 "AddToCart",
                 request,
                 null,
-                null // No value for AddToCart
+                null, // No value for AddToCart
+                "ARS",
+                dto.getEventId() // ID for deduplication
             );
         }
         
