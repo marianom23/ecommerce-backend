@@ -69,6 +69,19 @@ public class Payment {
     @Column(length = 300)
     private String receiptUrl;
 
+    // Meta / Tracking info
+    @Column(length = 45)
+    private String clientIp;
+
+    @Column(length = 300)
+    private String userAgent;
+
+    @Column(length = 300)
+    private String fbp;
+
+    @Column(length = 300)
+    private String fbc;
+
     @Lob
     @Column(columnDefinition = "TEXT")
     private String providerMetadata; // JSON (init_point, etc.)

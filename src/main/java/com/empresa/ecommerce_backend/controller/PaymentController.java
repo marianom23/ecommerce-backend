@@ -42,21 +42,8 @@ public class PaymentController {
     ) {
         ServiceResult<OrderResponse> result = paymentService.reviewBankTransferByAdmin(orderId, req.isApprove(), req.getNote());
         
-        // 📊 Si se aprobó, enviar evento Purchase a Meta
-        if (req.isApprove() && result.getData() != null) {
-            OrderResponse order = result.getData();
-            metaPixelService.sendEvent(
-                "Purchase",
-                metaPixelService.extractClientIp(request),
-                request.getHeader("User-Agent"),
-                request.getRequestURL().toString(),
-                metaPixelService.extractFbpFbc(request),
-                null, // Admin action
-                order.getTotalAmount().doubleValue(),
-                "ARS",
-                "order-" + order.getOrderNumber()
-            );
-        }
+        // 📊 Si se aprobó, el Service ya envía el evento a Meta.
+        // metaPixelService.sendEvent(...) REMOVED
         
         return result;
     }
@@ -82,20 +69,8 @@ public class PaymentController {
         // TODO: validar firma
         com.empresa.ecommerce_backend.model.Order order = paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
         
-        // 📊 Si el pago fue aprobado, enviar evento Purchase a Meta
-        if (order != null) {
-            metaPixelService.sendEvent(
-                "Purchase",
-                metaPixelService.extractClientIp(request),
-                request.getHeader("User-Agent"),
-                request.getRequestURL().toString(),
-                metaPixelService.extractFbpFbc(request),
-                order.getUser(),
-                order.getTotalAmount().doubleValue(),
-                "ARS",
-                "order-" + order.getOrderNumber()
-            );
-        }
+        // 📊 Si el pago se aprueba, el Service (handleGatewayWebhook) envía el evento a Meta.
+        // metaPixelService.sendEvent(...) REMOVED
         
         return "ok";
     }

@@ -28,6 +28,9 @@ import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
+import jakarta.servlet.http.HttpServletRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -72,6 +75,22 @@ public class PaymentServiceImpl implements PaymentService {
             default -> LocalDateTime.now().plusMinutes(30); // MercadoPago, Card, etc.
         }; 
         p.setExpiresAt(expiration);
+        
+        // 👇 Capture User Context for Meta (IP, UA, Cookies)
+        try {
+            var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs != null) {
+                HttpServletRequest req = attrs.getRequest();
+                p.setClientIp(metaPixelService.extractClientIp(req));
+                p.setUserAgent(req.getHeader("User-Agent"));
+                
+                var cookies = metaPixelService.extractFbpFbc(req);
+                p.setFbp(cookies.get(0));
+                p.setFbc(cookies.get(1));
+            }
+        } catch (Exception e) {
+            // Context retrieval failed (e.g. called from scheduled task), ignore.
+        }
 
         try {
             if (method == PaymentMethod.MERCADO_PAGO || method == PaymentMethod.CARD) {
@@ -146,7 +165,26 @@ public class PaymentServiceImpl implements PaymentService {
                     // 📧 Notificar pago aprobado
                     emailService.sendPaymentApprovedNotification(o.getId());
                     
-                    return o; // 📊 Retornar order para enviar evento Meta
+                    // 📊 EVENTO PURCHASE (Meta)
+                    // Usar datos guardados en Payment p para "impersonar" al usuario original
+                    String userIp = (p.getClientIp() != null) ? p.getClientIp() : "0.0.0.0";
+                    String userAgent = (p.getUserAgent() != null) ? p.getUserAgent() : "Backend/Webhook";
+                    String fbp = p.getFbp();
+                    String fbc = p.getFbc();
+
+                    metaPixelService.sendEvent(
+                        "Purchase",
+                        userIp,
+                        userAgent,
+                        frontBaseUrl + "/checkout/success", // URL lógica de éxito
+                        java.util.Arrays.asList(fbp, fbc),
+                        o.getUser(),
+                        o.getTotalAmount().doubleValue(),
+                        "ARS",
+                        "order-" + o.getOrderNumber()
+                    );
+                    
+                    return o; 
                 }
                 case REJECTED, CANCELED, EXPIRED -> {
                     rollbackStock(o);
@@ -217,6 +255,25 @@ public class PaymentServiceImpl implements PaymentService {
             
             // 📧 Notificar pago aprobado
             emailService.sendPaymentApprovedNotification(o.getId());
+
+            // 📊 EVENTO PURCHASE (Meta)
+            String userIp = (p.getClientIp() != null) ? p.getClientIp() : "0.0.0.0";
+            String userAgent = (p.getUserAgent() != null) ? p.getUserAgent() : "Backend/AdminAction";
+            String fbp = p.getFbp();
+            String fbc = p.getFbc();
+
+            metaPixelService.sendEvent(
+                "Purchase",
+                userIp,
+                userAgent,
+                frontBaseUrl + "/checkout/success", 
+                java.util.Arrays.asList(fbp, fbc),
+                o.getUser(),
+                o.getTotalAmount().doubleValue(),
+                "ARS",
+                "order-" + o.getOrderNumber()
+            );
+
         } else {
             rollbackStock(o);
             o.setStatus(OrderStatus.CANCELED);
