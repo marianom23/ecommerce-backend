@@ -90,7 +90,12 @@ public class CartServiceImpl implements CartService {
 
             // Clonar items del carrito "ajeno" al mío
             mergeItems(otherCart, myCart);
-            cartRepository.save(myCart); // Guardar cambios
+            cartRepository.save(myCart); // Guardar cambios en mi carrito
+
+            // VACIAR el carrito ajeno (Move semantics)
+            cartItemRepository.deleteAll(otherCart.getItems());
+            otherCart.getItems().clear();
+            cartRepository.save(otherCart);
 
             // No rotamos si ya tiene sessionId
             if (myCart.getSessionId() == null || myCart.getSessionId().isBlank()) {
