@@ -125,30 +125,6 @@ public class AuthController {
         }
     }
 
-    /* -------- Obtener Token desde Cookie (para OAuth) -------- */
-    @GetMapping("/auth/token")
-    public ServiceResult<com.empresa.ecommerce_backend.dto.response.TokenResponse> getTokenFromCookie(HttpServletRequest request) {
-        // Leer token desde cookie auth_token
-        jakarta.servlet.http.Cookie[] cookies = request.getCookies();
-        String token = null;
-        
-        if (cookies != null) {
-            for (jakarta.servlet.http.Cookie cookie : cookies) {
-                if (AuthCookieManager.AUTH_COOKIE.equals(cookie.getName())) {
-                    token = cookie.getValue();
-                    break;
-                }
-            }
-        }
-        
-        if (token == null || token.isBlank()) {
-            return ServiceResult.error(org.springframework.http.HttpStatus.UNAUTHORIZED, "No hay token disponible");
-        }
-        
-        // Retornar el token en el body para que el frontend lo guarde en localStorage
-        return ServiceResult.ok(new com.empresa.ecommerce_backend.dto.response.TokenResponse(token));
-    }
-
     /* -------- Logout -------- */
     @PostMapping("/logout")
     public ServiceResult<Void> logout(HttpServletRequest request, HttpServletResponse response) {
