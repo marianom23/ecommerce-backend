@@ -70,11 +70,13 @@ public class CartServiceImpl implements CartService {
         }
 
 
-        // A) Cookie → carrito de OTRO usuario ⇒ ignorar y usar/crear el del usuario actual
+        // A) Cookie → carrito de OTRO usuario ⇒ CLONAR items al usuario actual (Smart Merge)
         if (sessionCartOpt.isPresent()
                 && sessionCartOpt.get().getUser() != null
                 && !sessionCartOpt.get().getUser().getId().equals(userId)) {
 
+            Cart otherCart = sessionCartOpt.get();
+            
             Cart myCart = userCartOpt.orElseGet(() -> {
                 Cart c = new Cart();
                 User u = new User();
@@ -86,7 +88,11 @@ public class CartServiceImpl implements CartService {
                 return cartRepository.save(c);
             });
 
-            // No rotamos si ya tiene sessionId (la cookie cambia igual porque el valor es distinto al de la cookie actual del browser)
+            // Clonar items del carrito "ajeno" al mío
+            mergeItems(otherCart, myCart);
+            cartRepository.save(myCart); // Guardar cambios
+
+            // No rotamos si ya tiene sessionId
             if (myCart.getSessionId() == null || myCart.getSessionId().isBlank()) {
                 myCart.setSessionId(UUID.randomUUID().toString());
                 myCart.setUpdatedAt(LocalDateTime.now());
@@ -174,36 +180,16 @@ public class CartServiceImpl implements CartService {
 
         // session guest o mismo user → merge en userCart (sin rotar si ya hay sessionId)
         if (sessionCart.getUser() == null || sessionCart.getUser().getId().equals(userId)) {
-            for (CartItem si : sessionCart.getItems()) {
-                var variant = si.getVariant();
-                if (variant == null) continue;
-
-                var existingOpt = cartItemRepository.findByCartAndProductAndVariant(userCart, si.getProduct(), variant);
-                int baseQty = existingOpt.map(CartItem::getQuantity).orElse(0);
-                int mergedQty = clampQty(variant, baseQty + si.getQuantity());
-
-                if (existingOpt.isEmpty()) {
-                    if (mergedQty <= 0) continue;
-                    CartItem ni = new CartItem();
-                    ni.setCart(userCart);
-                    ni.setProduct(si.getProduct());
-                    ni.setVariant(variant);
-                    ni.setQuantity(mergedQty);
-                    ni.setPriceAtAddition(si.getPriceAtAddition());
-                    ni.setDiscountedPriceAtAddition(si.getDiscountedPriceAtAddition());
-                    userCart.getItems().add(ni);
-                } else {
-                    if (mergedQty == 0) {
-                        cartItemRepository.delete(existingOpt.get());
-                        userCart.getItems().remove(existingOpt.get());
-                    } else {
-                        existingOpt.get().setQuantity(mergedQty);
-                    }
-                }
+            mergeItems(sessionCart, userCart);
+            
+            // Si era guest, borrarlo tras el merge
+            if (sessionCart.getUser() == null) {
+                cartItemRepository.deleteAll(sessionCart.getItems());
+                sessionCart.getItems().clear();
+                cartRepository.delete(sessionCart);
             }
-            cartItemRepository.deleteAll(sessionCart.getItems());
-            sessionCart.getItems().clear();
-            cartRepository.delete(sessionCart);
+            // Si era del mismo user, ya está mergeado en sí mismo (aunque la lógica de arriba ya maneja 'mergeItems' sobre userCart)
+            // Nota: mergeItems maneja la lógica de buscar en userCart, así que si sessionCart == userCart, no pasa nada raro.
 
             if (userCart.getSessionId() == null || userCart.getSessionId().isBlank()) {
                 userCart.setSessionId(UUID.randomUUID().toString());
@@ -608,5 +594,36 @@ public class CartServiceImpl implements CartService {
 
     private int safeStock(Integer stock) {
         return stock == null ? 0 : stock;
+    }
+
+    /* Helper para mergear items de source -> target */
+    private void mergeItems(Cart source, Cart target) {
+        for (CartItem si : source.getItems()) {
+            var variant = si.getVariant();
+            if (variant == null) continue;
+
+            var existingOpt = cartItemRepository.findByCartAndProductAndVariant(target, si.getProduct(), variant);
+            int baseQty = existingOpt.map(CartItem::getQuantity).orElse(0);
+            int mergedQty = clampQty(variant, baseQty + si.getQuantity());
+
+            if (existingOpt.isEmpty()) {
+                if (mergedQty <= 0) continue;
+                CartItem ni = new CartItem();
+                ni.setCart(target);
+                ni.setProduct(si.getProduct());
+                ni.setVariant(variant);
+                ni.setQuantity(mergedQty);
+                ni.setPriceAtAddition(si.getPriceAtAddition());
+                ni.setDiscountedPriceAtAddition(si.getDiscountedPriceAtAddition());
+                target.getItems().add(ni);
+            } else {
+                if (mergedQty == 0) {
+                    cartItemRepository.delete(existingOpt.get());
+                    target.getItems().remove(existingOpt.get());
+                } else {
+                    existingOpt.get().setQuantity(mergedQty);
+                }
+            }
+        }
     }
 }
