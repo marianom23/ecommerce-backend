@@ -324,7 +324,7 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String generateRefreshToken(Long userId) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + 604800000); // 7 días
+        Date expiryDate = new Date(now.getTime() + 120000); // 2 minutos
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
 
         return Jwts.builder()
