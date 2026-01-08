@@ -10,14 +10,18 @@ import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.dto.response.UserMeResponse;
 import com.empresa.ecommerce_backend.service.OAuth2UserProcessor;
 import com.empresa.ecommerce_backend.service.UserServiceImpl;
+import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import com.empresa.ecommerce_backend.web.CartCookieManager;
-import com.empresa.ecommerce_backend.web.AuthCookieManager;
+import com.empresa.ecommerce_backend.web.RefreshTokenCookieManager;
+import com.empresa.ecommerce_backend.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -27,7 +31,9 @@ public class AuthController {
     private final UserServiceImpl userServiceImpl;
     private final CartCookieManager cartCookieManager;
     private final OAuth2UserProcessor oAuth2UserProcessor;
-    private final AuthCookieManager authCookieManager;
+    private final RefreshTokenCookieManager refreshTokenCookieManager;
+    private final JwtService jwtService;
+    private final UserRepository userRepository;
 
     /* -------- Registro -------- */
     @PostMapping("/register")
@@ -51,12 +57,22 @@ public class AuthController {
         String ip = extractClientIp(servletRequest);
         ServiceResult<LoginResponse> result = userServiceImpl.login(request, ip);
 
-        // Si el login fue exitoso, setear cookie httpOnly con el JWT
+        // Si login exitoso, generar access + refresh tokens
         if (result.getData() != null
                 && result.getStatus() != null
                 && result.getStatus().is2xxSuccessful()) {
-            String token = result.getData().getToken();
-            authCookieManager.setAuthCookie(response, token, servletRequest.isSecure());
+            
+            LoginResponse data = result.getData();
+            
+            // Generar access token (15 min)
+            String accessToken = jwtService.generateAccessToken(data.getId(), data.getEmail(), data.getRoles());
+            
+            // Generar refresh token (7 días) y guardarlo en cookie
+            String refreshToken = jwtService.generateRefreshToken(data.getId());
+            refreshTokenCookieManager.setRefreshCookie(response, refreshToken, servletRequest.isSecure());
+            
+            // Reemplazar token en response con access token
+            data.setToken(accessToken);
         }
 
         return result;
@@ -73,12 +89,22 @@ public class AuthController {
         ServiceResult<LoginResponse> result =
                 oAuth2UserProcessor.processFromFrontendOAuthCallback(dto, ip);
 
-        // También acá seteamos cookie si todo salió bien
+        // OAuth también usa dual-token
         if (result.getData() != null
                 && result.getStatus() != null
                 && result.getStatus().is2xxSuccessful()) {
-            String token = result.getData().getToken();
-            authCookieManager.setAuthCookie(response, token, servletRequest.isSecure());
+            
+            LoginResponse data = result.getData();
+            
+            // Generar access token (15 min)
+            String accessToken = jwtService.generateAccessToken(data.getId(), data.getEmail(), data.getRoles());
+            
+            // Generar refresh token (7 días)
+            String refreshToken = jwtService.generateRefreshToken(data.getId());
+            refreshTokenCookieManager.setRefreshCookie(response, refreshToken, servletRequest.isSecure());
+            
+            // Reemplazar con access token
+            data.setToken(accessToken);
         }
 
         return result;
@@ -125,12 +151,39 @@ public class AuthController {
         }
     }
 
+    /* -------- Refresh Token -------- */
+    @PostMapping("/auth/refresh")
+    public ServiceResult<com.empresa.ecommerce_backend.dto.response.TokenResponse> refreshToken(
+            @CookieValue(value = "refresh_token", required = false) String refreshToken
+    ) {
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return ServiceResult.error(org.springframework.http.HttpStatus.UNAUTHORIZED, "No refresh token");
+        }
+
+        if (!jwtService.isValidRefreshToken(refreshToken)) {
+            return ServiceResult.error(org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid refresh token");
+        }
+
+        // Extraer userId y generar nuevo access token
+        Long userId = jwtService.getUserIdFromToken(refreshToken);
+        var user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        List<String> roles = user.getRoles().stream()
+                .map(r -> r.getName().name())
+                .toList();
+
+        String newAccessToken = jwtService.generateAccessToken(userId, user.getEmail(), roles);
+
+        return ServiceResult.ok(new com.empresa.ecommerce_backend.dto.response.TokenResponse(newAccessToken));
+    }
+
     /* -------- Logout -------- */
     @PostMapping("/logout")
     public ServiceResult<Void> logout(HttpServletRequest request, HttpServletResponse response) {
-        // Limpiamos carrito + auth
+        // Limpiamos carrito + refresh token
         cartCookieManager.clearSessionCookie(response, request.isSecure());
-        authCookieManager.clearAuthCookie(response, request.isSecure());
+        refreshTokenCookieManager.clearRefreshCookie(response, request.isSecure());
         return ServiceResult.noContent(); // 204
     }
 

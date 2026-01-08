@@ -53,6 +53,7 @@ public class SecurityConfig {
                                 "/api/login",
                                 "/api/register",
                                 "/api/verify-email",
+                                "/api/auth/refresh",
                                 "/swagger-ui/**",
                                 "/api-docs/**",
                                 "/api/oauth2/callback"

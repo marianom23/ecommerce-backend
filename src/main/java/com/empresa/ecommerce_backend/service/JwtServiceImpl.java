@@ -302,6 +302,72 @@ public class JwtServiceImpl implements JwtService {
         }
     }
 
+    /* ===== REFRESH TOKEN IMPLEMENTATION ===== */
+
+    @Override
+    public String generateAccessToken(Long userId, String username, List<String> roles) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + 900000); // 15 minutos
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+
+        return Jwts.builder()
+                .setSubject(username)
+                .claim("uid", userId)
+                .claim("roles", roles)
+                .claim("type", "access")
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    @Override
+    public String generateRefreshToken(Long userId) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + 604800000); // 7 días
+        SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+
+        return Jwts.builder()
+                .setSubject(String.valueOf(userId))
+                .claim("type", "refresh")
+                .setIssuedAt(now)
+                .setExpiration(expiryDate)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    @Override
+    public boolean isValidRefreshToken(String token) {
+        try {
+            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+
+            return "refresh".equals(claims.get("type"));
+        } catch (JwtException | IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    @Override
+    public Long getUserIdFromToken(String token) {
+        try {
+            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
+            Claims claims = Jwts.parserBuilder()
+                    .setSigningKey(key)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+
+            String sub = claims.getSubject();
+            return Long.parseLong(sub);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
 
 }

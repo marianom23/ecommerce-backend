@@ -3,6 +3,7 @@ package com.empresa.ecommerce_backend.service.interfaces;
 import org.springframework.security.core.Authentication;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 public interface JwtService {
@@ -46,4 +47,26 @@ public interface JwtService {
      * Devuelve el apellido (family_name o derivado de "name").
      */
     String extractLastName(String idToken);
+
+    /* ===== REFRESH TOKEN METHODS ===== */
+
+    /**
+     * Genera un access token de corta duración (15 minutos).
+     */
+    String generateAccessToken(Long userId, String username, List<String> roles);
+
+    /**
+     * Genera un refresh token de larga duración (7 días).
+     */
+    String generateRefreshToken(Long userId);
+
+    /**
+     * Valida si un token es un refresh token válido.
+     */
+    boolean isValidRefreshToken(String token);
+
+    /**
+     * Extrae el userId de un refresh token.
+     */
+    Long getUserIdFromToken(String token);
 }
