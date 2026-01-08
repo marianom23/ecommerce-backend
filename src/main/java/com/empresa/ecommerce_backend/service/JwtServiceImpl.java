@@ -307,7 +307,7 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String generateAccessToken(Long userId, String username, List<String> roles) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + 60000); // 15 minutos
+        Date expiryDate = new Date(now.getTime() + 900000); // 15 minutos
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
 
         return Jwts.builder()
@@ -324,7 +324,7 @@ public class JwtServiceImpl implements JwtService {
     @Override
     public String generateRefreshToken(Long userId) {
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + 120000); // 2 minutos
+        Date expiryDate = new Date(now.getTime() + 604800000); // 7 dias
         SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
 
         return Jwts.builder()
