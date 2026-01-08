@@ -16,6 +16,9 @@ public class CartCookieManager {
 
     public static final String CART_COOKIE = "cart_session";
 
+    @org.springframework.beans.factory.annotation.Value("${app.cookie.domain:}")
+    private String cookieDomain;
+
     public void maybeSetSessionCookie(String existingSessionId,
                                       ServiceResult<CartResponse> result,
                                       HttpServletRequest request,
@@ -42,6 +45,10 @@ public class CartCookieManager {
                 .path("/")
                 .maxAge(Duration.ofDays(30));
 
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            b.domain(cookieDomain);
+        }
+
         if (prod) {
             b.secure(true).sameSite("None");
         } else {
@@ -57,6 +64,10 @@ public class CartCookieManager {
                 .httpOnly(true)
                 .path("/")
                 .maxAge(0); // elimina
+
+        if (cookieDomain != null && !cookieDomain.isBlank()) {
+            b.domain(cookieDomain);
+        }
 
         if (prod) {
             b.secure(true).sameSite("None");
