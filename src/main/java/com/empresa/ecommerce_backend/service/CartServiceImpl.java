@@ -509,7 +509,10 @@ public class CartServiceImpl implements CartService {
             // autenticado → por usuario
             return cartRepository.findByUserId(userId)
                     .orElseGet(() -> {
-                        if (!createIfMissing) throw new EntityNotFoundException("Carrito no encontrado");
+                        if (!createIfMissing) {
+                            // 🔥 Usuario autenticado sin carrito = sesión corrupta -> 401
+                            throw new BadCredentialsException("Sesión inválida. Por favor, volvé a iniciar sesión.");
+                        }
                         Cart c = new Cart();
                         User u = new User();
                         u.setId(userId);
