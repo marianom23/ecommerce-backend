@@ -108,9 +108,7 @@ public class AuthController {
             
             // Fusionar carrito guest con usuario
             if (guestSessionId != null && !guestSessionId.isBlank()) {
-                var cartResult = cartService.attachCartToUser(guestSessionId, data.getId());
-                // IMPORTANTE: Si attach rota el sessionId, actualizar cookie
-                cartCookieManager.maybeSetSessionCookie(guestSessionId, cartResult, servletRequest, response);
+                cartService.attachCartToUser(guestSessionId, data.getId());
             }
             
             // Generar access token (15 min)
@@ -160,8 +158,7 @@ public class AuthController {
             }
             
             if (guestSessionId != null && !guestSessionId.isBlank()) {
-                var cartResult = cartService.attachCartToUser(guestSessionId, data.getId());
-                cartCookieManager.maybeSetSessionCookie(guestSessionId, cartResult, servletRequest, response);
+                cartService.attachCartToUser(guestSessionId, data.getId());
             }
             
             // Generar access token (15 min)
@@ -223,8 +220,7 @@ public class AuthController {
     @PostMapping("/auth/refresh")
     public ServiceResult<com.empresa.ecommerce_backend.dto.response.TokenResponse> refreshToken(
             @CookieValue(value = "refresh_token", required = false) String refreshToken,
-            HttpServletRequest request,
-            HttpServletResponse response
+            HttpServletRequest request
     ) {
         if (refreshToken == null || refreshToken.isBlank()) {
             return ServiceResult.error(org.springframework.http.HttpStatus.UNAUTHORIZED, "No refresh token");
@@ -239,8 +235,7 @@ public class AuthController {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // 🔥 FIX: Asegurar que el carrito (cookie) esté linkeado al usuario al refrescar
-        // Y si rota el ID, actualizar la cookie del navegador
+        // 🔥 FIX: Asegurar que el carrito esté linkeado al usuario al refrescar
         String cookieSessionId = null;
         if (request.getCookies() != null) {
             for (jakarta.servlet.http.Cookie c : request.getCookies()) {
@@ -250,14 +245,9 @@ public class AuthController {
                 }
             }
         }
-
-        // Recuperar carrito (aunque sea null el user lo trae si existe o crea uno nuevo si no)
-        // Usamos cookieSessionId para intentar recuperar el contexto anterior
-        var cartResult = cartService.attachCartToUser(cookieSessionId, userId);
-
-        // Si el resultado trae un sessionId y nosotros no teníamos, o es diferente -> SET COOKIE
-        // Esto es clave si attachCartToUser decidió rotar el ID por seguridad (Adoption)
-        cartCookieManager.maybeSetSessionCookie(cookieSessionId, cartResult, request, response);
+        if (cookieSessionId != null && !cookieSessionId.isBlank()) {
+            cartService.attachCartToUser(cookieSessionId, userId);
+        }
 
         List<String> roles = user.getRoles().stream()
                 .map(r -> r.getName().name())
