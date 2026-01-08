@@ -219,7 +219,8 @@ public class AuthController {
     /* -------- Refresh Token -------- */
     @PostMapping("/auth/refresh")
     public ServiceResult<com.empresa.ecommerce_backend.dto.response.TokenResponse> refreshToken(
-            @CookieValue(value = "refresh_token", required = false) String refreshToken
+            @CookieValue(value = "refresh_token", required = false) String refreshToken,
+            HttpServletRequest request
     ) {
         if (refreshToken == null || refreshToken.isBlank()) {
             return ServiceResult.error(org.springframework.http.HttpStatus.UNAUTHORIZED, "No refresh token");

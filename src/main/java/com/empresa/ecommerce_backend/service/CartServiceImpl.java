@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.authentication.BadCredentialsException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -529,7 +530,8 @@ public class CartServiceImpl implements CartService {
                     // cookie apunta a carrito de usuario
                     if (!createIfMissing) {
                         // mutaciones guest → NO tocar carritos de usuario
-                        throw new EntityNotFoundException("Carrito no encontrado");
+                        // 🛑 Lanzamos 401 para que el front refresque
+                        throw new BadCredentialsException("Sesión expirada. Por favor, refresca tu token.");
                     }
                     // operaciones tipo GET/add → crear guest nuevo
                     Cart c = new Cart();
@@ -568,8 +570,9 @@ public class CartServiceImpl implements CartService {
         if (userId == null && sessionId != null && !sessionId.isBlank()) {
             var existing = cartRepository.findBySessionId(sessionId);
             if (existing.isPresent() && existing.get().getUser() != null) {
-                return ServiceResult.error(HttpStatus.FORBIDDEN,
-                        "La cookie apunta a un carrito de usuario. Iniciá sesión para operar ese carrito.");
+                // 🛑 Retornamos 401 (Unauthorized) para que el frontend intente refrescar token
+                return ServiceResult.error(HttpStatus.UNAUTHORIZED,
+                        "Sesión expirada. Por favor, refresca tu token.");
             }
         }
         return null; // OK
