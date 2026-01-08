@@ -18,7 +18,7 @@ public interface PaymentService {
 
     ServiceResult<OrderResponse> cancelPayment(Long orderId, String triggeredBy, String note);
 
-    void handleGatewayWebhook(String provider, Map<String, Object> payload);
+    Order handleGatewayWebhook(String provider, Map<String, Object> payload);
 
     int expireOverduePayments();
 }

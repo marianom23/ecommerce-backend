@@ -17,6 +17,7 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final com.empresa.ecommerce_backend.service.MetaPixelService metaPixelService;
 
     // Usuario confirma que hizo la transferencia
     @PostMapping("/orders/{orderId}/bank-transfer/confirm")
@@ -36,9 +37,25 @@ public class PaymentController {
     @PostMapping("/orders/{orderId}/bank-transfer/review")
     public ServiceResult<OrderResponse> adminReviewBankTransfer(
             @PathVariable Long orderId,
-            @RequestBody BankTransferAdminReviewRequest req
+            @RequestBody BankTransferAdminReviewRequest req,
+            jakarta.servlet.http.HttpServletRequest request
     ) {
-        return paymentService.reviewBankTransferByAdmin(orderId, req.isApprove(), req.getNote());
+        ServiceResult<OrderResponse> result = paymentService.reviewBankTransferByAdmin(orderId, req.isApprove(), req.getNote());
+        
+        // 📊 Si se aprobó, enviar evento Purchase a Meta
+        if (req.isApprove() && result.getData() != null) {
+            OrderResponse order = result.getData();
+            metaPixelService.sendEvent(
+                "Purchase",
+                request,
+                null, // Admin action, no user context
+                order.getTotalAmount().doubleValue(),
+                "ARS",
+                "order-" + order.getOrderNumber() // Event ID for deduplication
+            );
+        }
+        
+        return result;
     }
 
     // Cancelar pago (user/admin)
@@ -54,9 +71,26 @@ public class PaymentController {
 
     // Webhook Mercado Pago (sin ServiceResult; solo 200/OK)
     @PostMapping("/webhook/mercadopago")
-    public String mpWebhook(@RequestBody Map<String, Object> payload, @RequestHeader Map<String, String> headers) {
+    public String mpWebhook(
+            @RequestBody Map<String, Object> payload,
+            @RequestHeader Map<String, String> headers,
+            jakarta.servlet.http.HttpServletRequest request
+    ) {
         // TODO: validar firma
-        paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
+        com.empresa.ecommerce_backend.model.Order order = paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
+        
+        // 📊 Si el pago fue aprobado, enviar evento Purchase a Meta
+        if (order != null) {
+            metaPixelService.sendEvent(
+                "Purchase",
+                request,
+                order.getUser(),
+                order.getTotalAmount().doubleValue(),
+                "ARS",
+                "order-" + order.getOrderNumber() // Event ID for deduplication
+            );
+        }
+        
         return "ok";
     }
 

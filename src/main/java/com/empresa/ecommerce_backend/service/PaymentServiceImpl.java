@@ -33,6 +33,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PaymentServiceImpl implements PaymentService {
 
+    private final MetaPixelService metaPixelService;
+
     private final OrderRepository orderRepo;
     private final PaymentRepository paymentRepo;
     private final PaymentEventRepository paymentEventRepo;
@@ -95,18 +97,18 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public void handleGatewayWebhook(String provider, Map<String, Object> payload) {
+    public Order handleGatewayWebhook(String provider, Map<String, Object> payload) {
         // 1) sacar payment_id del payload (body o query merged por el controller)
         String paymentId = extractMpPaymentId(payload);
-        if (paymentId == null) return;
+        if (paymentId == null) return null;
 
         // 2) consultar a MP el pago
         MpPayment mp = getMpPayment(paymentId);
-        if (mp == null) return;
+        if (mp == null) return null;
 
         // 3) Resolver orden por external_reference = "order-<id>"
         String extRef = mp.external_reference();
-        if (extRef == null || !extRef.startsWith("order-")) return;
+        if (extRef == null || !extRef.startsWith("order-")) return null;
         Long orderId = Long.valueOf(extRef.substring("order-".length()));
 
         Order o = orderRepo.findByIdWithLock(orderId)
@@ -143,6 +145,8 @@ public class PaymentServiceImpl implements PaymentService {
                     
                     // 📧 Notificar pago aprobado
                     emailService.sendPaymentApprovedNotification(o.getId());
+                    
+                    return o; // 📊 Retornar order para enviar evento Meta
                 }
                 case REJECTED, CANCELED, EXPIRED -> {
                     rollbackStock(o);
@@ -152,6 +156,7 @@ public class PaymentServiceImpl implements PaymentService {
                 default -> { /* pending: no tocar orden */ }
             }
         }
+        return null;
     }
 
     @Override

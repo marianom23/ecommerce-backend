@@ -35,11 +35,32 @@ public class AuthController {
     private final JwtService jwtService;
     private final UserRepository userRepository;
     private final com.empresa.ecommerce_backend.service.interfaces.CartService cartService;
+    private final com.empresa.ecommerce_backend.service.MetaPixelService metaPixelService;
 
     /* -------- Registro -------- */
     @PostMapping("/register")
-    public ServiceResult<RegisterUserResponse> register(@Valid @RequestBody RegisterUserRequest dto) {
-        return userServiceImpl.registerUser(dto);
+    public ServiceResult<RegisterUserResponse> register(
+            @Valid @RequestBody RegisterUserRequest dto,
+            jakarta.servlet.http.HttpServletRequest request
+    ) {
+        ServiceResult<RegisterUserResponse> result = userServiceImpl.registerUser(dto);
+        
+        // 📊 Enviar evento CompleteRegistration a Meta
+        if (result.getData() != null && result.getStatus() != null && result.getStatus().is2xxSuccessful()) {
+            RegisterUserResponse user = result.getData();
+            // Crear un User temporal para el evento (solo con email)
+            com.empresa.ecommerce_backend.model.User tempUser = new com.empresa.ecommerce_backend.model.User();
+            tempUser.setEmail(user.getEmail());
+            
+            metaPixelService.sendEvent(
+                "CompleteRegistration",
+                request,
+                tempUser,
+                null // No value for registration
+            );
+        }
+        
+        return result;
     }
 
     /* -------- Verificación de correo -------- */

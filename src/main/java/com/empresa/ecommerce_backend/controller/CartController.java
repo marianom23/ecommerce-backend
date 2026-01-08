@@ -5,6 +5,7 @@ import com.empresa.ecommerce_backend.dto.request.UpdateQtyRequest;
 import com.empresa.ecommerce_backend.dto.response.CartResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.security.AuthUser;
+import com.empresa.ecommerce_backend.service.MetaPixelService;
 import com.empresa.ecommerce_backend.service.interfaces.CartService;
 import com.empresa.ecommerce_backend.web.CartCookieManager;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +16,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+
 @RestController
 @RequestMapping("/api/cart")
 @RequiredArgsConstructor
@@ -22,6 +24,7 @@ public class CartController {
 
     private final CartService cartService;
     private final CartCookieManager cookieManager;
+    private final MetaPixelService metaPixelService;
 
     /* =================== ATTACH =================== */
     @PreAuthorize("isAuthenticated()")
@@ -77,6 +80,18 @@ public class CartController {
         Long userId = (me != null) ? me.getId() : null;
         var result = cartService.addItem(userId, sessionId, dto);
         cookieManager.maybeSetSessionCookie(sessionId, result, request, response);
+        
+        // 📊 Enviar evento AddToCart a Meta
+        if (result.getData() != null) {
+            // No enviamos info del usuario para AddToCart (privacy-first)
+            metaPixelService.sendEvent(
+                "AddToCart",
+                request,
+                null,
+                null // No value for AddToCart
+            );
+        }
+        
         return result;
     }
 
