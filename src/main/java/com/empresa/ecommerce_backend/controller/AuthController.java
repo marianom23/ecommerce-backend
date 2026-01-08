@@ -108,7 +108,9 @@ public class AuthController {
             
             // Fusionar carrito guest con usuario
             if (guestSessionId != null && !guestSessionId.isBlank()) {
-                cartService.attachCartToUser(guestSessionId, data.getId());
+                var cartResult = cartService.attachCartToUser(guestSessionId, data.getId());
+                // Actualizar cookie si attachCartToUser rotó el sessionId
+                cartCookieManager.maybeSetSessionCookie(guestSessionId, cartResult, servletRequest, response);
             }
             
             // Generar access token (15 min)
@@ -158,7 +160,8 @@ public class AuthController {
             }
             
             if (guestSessionId != null && !guestSessionId.isBlank()) {
-                cartService.attachCartToUser(guestSessionId, data.getId());
+                var cartResult = cartService.attachCartToUser(guestSessionId, data.getId());
+                cartCookieManager.maybeSetSessionCookie(guestSessionId, cartResult, servletRequest, response);
             }
             
             // Generar access token (15 min)
@@ -235,20 +238,7 @@ public class AuthController {
         var user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // 🔥 FIX: Asegurar que el carrito esté linkeado al usuario al refrescar
-        // Esto actúa como fallback si el login no completó el attach correctamente
-        String cookieSessionId = null;
-        if (request.getCookies() != null) {
-            for (jakarta.servlet.http.Cookie c : request.getCookies()) {
-                if ("cart_session".equals(c.getName())) {
-                    cookieSessionId = c.getValue();
-                    break;
-                }
-            }
-        }
-        if (cookieSessionId != null && !cookieSessionId.isBlank()) {
-            cartService.attachCartToUser(cookieSessionId, userId);
-        }
+
 
         List<String> roles = user.getRoles().stream()
                 .map(r -> r.getName().name())
