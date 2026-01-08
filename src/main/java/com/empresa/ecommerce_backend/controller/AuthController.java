@@ -9,6 +9,8 @@ import com.empresa.ecommerce_backend.dto.response.RegisterUserResponse;
 import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.dto.response.UserMeResponse;
 import com.empresa.ecommerce_backend.service.OAuth2UserProcessor;
+import com.empresa.ecommerce_backend.service.PostLoginProcessor;
+import com.empresa.ecommerce_backend.service.MetaPixelService;
 import com.empresa.ecommerce_backend.service.UserServiceImpl;
 import com.empresa.ecommerce_backend.service.interfaces.JwtService;
 import com.empresa.ecommerce_backend.web.CartCookieManager;
@@ -29,13 +31,13 @@ import java.util.List;
 public class AuthController {
 
     private final UserServiceImpl userServiceImpl;
-    private final CartCookieManager cartCookieManager;
     private final OAuth2UserProcessor oAuth2UserProcessor;
+    private final CartCookieManager cartCookieManager;
     private final RefreshTokenCookieManager refreshTokenCookieManager;
     private final JwtService jwtService;
     private final UserRepository userRepository;
-    private final com.empresa.ecommerce_backend.service.interfaces.CartService cartService;
-    private final com.empresa.ecommerce_backend.service.MetaPixelService metaPixelService;
+    private final MetaPixelService metaPixelService;
+    private final PostLoginProcessor postLoginProcessor;
 
     /* -------- Registro -------- */
     @PostMapping("/register")
@@ -84,44 +86,9 @@ public class AuthController {
         String ip = extractClientIp(servletRequest);
         ServiceResult<LoginResponse> result = userServiceImpl.login(request, ip);
 
-        // Si login exitoso, generar access + refresh tokens Y fusionar carrito
-        if (result.getData() != null
-                && result.getStatus() != null
-                && result.getStatus().is2xxSuccessful()) {
-            
-            LoginResponse data = result.getData();
-            
-            // 🛒 FUSIONAR CARRITO: Leer sessionId de header o cookie
-            String guestSessionId = servletRequest.getHeader("X-Cart-Session");
-            if (guestSessionId == null || guestSessionId.isBlank()) {
-                // Fallback a cookie si no hay header
-                jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
-                if (cookies != null) {
-                    for (jakarta.servlet.http.Cookie cookie : cookies) {
-                        if ("cart_session".equals(cookie.getName())) {
-                            guestSessionId = cookie.getValue();
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            // Fusionar carrito guest con usuario
-            if (guestSessionId != null && !guestSessionId.isBlank()) {
-                var cartResult = cartService.attachCartToUser(guestSessionId, data.getId());
-                // Actualizar cookie si attachCartToUser rotó el sessionId
-                cartCookieManager.maybeSetSessionCookie(guestSessionId, cartResult, servletRequest, response);
-            }
-            
-            // Generar access token (15 min)
-            String accessToken = jwtService.generateAccessToken(data.getId(), data.getEmail(), data.getRoles());
-            
-            // Generar refresh token (7 días) y guardarlo en cookie
-            String refreshToken = jwtService.generateRefreshToken(data.getId());
-            refreshTokenCookieManager.setRefreshCookie(response, refreshToken, servletRequest.isSecure());
-            
-            // Reemplazar token en response con access token
-            data.setToken(accessToken);
+        // Procesar login exitoso: fusionar carrito, generar tokens, setear cookies
+        if (result.getData() != null && result.getStatus() != null && result.getStatus().is2xxSuccessful()) {
+            postLoginProcessor.process(result.getData(), servletRequest, response);
         }
 
         return result;
@@ -135,44 +102,11 @@ public class AuthController {
             HttpServletResponse response
     ) {
         String ip = extractClientIp(servletRequest);
-        ServiceResult<LoginResponse> result =
-                oAuth2UserProcessor.processFromFrontendOAuthCallback(dto, ip);
+        ServiceResult<LoginResponse> result = oAuth2UserProcessor.processFromFrontendOAuthCallback(dto, ip);
 
-        // OAuth también usa dual-token Y fusión de carrito
-        if (result.getData() != null
-                && result.getStatus() != null
-                && result.getStatus().is2xxSuccessful()) {
-            
-            LoginResponse data = result.getData();
-            
-            // 🛒 FUSIONAR CARRITO: Misma lógica que login normal
-            String guestSessionId = servletRequest.getHeader("X-Cart-Session");
-            if (guestSessionId == null || guestSessionId.isBlank()) {
-                jakarta.servlet.http.Cookie[] cookies = servletRequest.getCookies();
-                if (cookies != null) {
-                    for (jakarta.servlet.http.Cookie cookie : cookies) {
-                        if ("cart_session".equals(cookie.getName())) {
-                            guestSessionId = cookie.getValue();
-                            break;
-                        }
-                    }
-                }
-            }
-            
-            if (guestSessionId != null && !guestSessionId.isBlank()) {
-                var cartResult = cartService.attachCartToUser(guestSessionId, data.getId());
-                cartCookieManager.maybeSetSessionCookie(guestSessionId, cartResult, servletRequest, response);
-            }
-            
-            // Generar access token (15 min)
-            String accessToken = jwtService.generateAccessToken(data.getId(), data.getEmail(), data.getRoles());
-            
-            // Generar refresh token (7 días)
-            String refreshToken = jwtService.generateRefreshToken(data.getId());
-            refreshTokenCookieManager.setRefreshCookie(response, refreshToken, servletRequest.isSecure());
-            
-            // Reemplazar con access token
-            data.setToken(accessToken);
+        // Procesar login exitoso: fusionar carrito, generar tokens, setear cookies
+        if (result.getData() != null && result.getStatus() != null && result.getStatus().is2xxSuccessful()) {
+            postLoginProcessor.process(result.getData(), servletRequest, response);
         }
 
         return result;
