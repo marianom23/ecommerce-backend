@@ -50,11 +50,10 @@ public class CartController {
             HttpServletResponse response
     ) {
         String sessionId = resolveSessionId(headerSessionId, cookieSessionId);
-        // ✅ Si hay usuario autenticado, hacemos ATTACH aquí (merge/adopción usando la cookie real del browser)
+        // ✅ Si hay usuario autenticado, obtener SU carrito (la fusión ya pasó en login)
         if (me != null) {
             Long userId = me.getId();
-            var result = cartService.attachCartToUser(sessionId, userId);
-            cookieManager.maybeSetSessionCookie(sessionId, result, request, response);
+            var result = cartService.getOrCreate(userId, null);
             return result;
         }
 
