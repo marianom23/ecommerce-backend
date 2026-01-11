@@ -146,21 +146,39 @@ public class OAuth2UserProcessor {
             String lastName,
             AuthProvider providerEnum
     ) {
-        // Los parámetros son efectivamente final -> no rompe el lambda
-        return userRepository.findByOauthId(oauthId).orElseGet(() -> {
-            Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
-                    .orElseThrow(() -> new IllegalStateException("Rol CUSTOMER no encontrado"));
+        // Buscar por oauthId primero
+        Optional<User> byOauthId = userRepository.findByOauthId(oauthId);
+        if (byOauthId.isPresent()) {
+            return byOauthId.get();
+        }
 
-            User u = new User();
-            u.setOauthId(oauthId);
-            u.setEmail(email);
-            u.setFirstName(firstName != null ? firstName : "Usuario");
-            u.setLastName(lastName != null ? lastName : "OAuth");
-            u.setVerified(true);
-            u.setAuthProvider(providerEnum);
-            u.setRoles(Set.of(customerRole));
-            return userRepository.save(u);
-        });
+        // Si no existe por oauthId, verificar si el email ya existe con otro provider
+        if (email != null && !email.isBlank()) {
+            Optional<User> byEmail = userRepository.findByEmail(email);
+            if (byEmail.isPresent()) {
+                User existing = byEmail.get();
+                // Si el email existe pero con otro provider (ej: LOCAL), bloquear
+                if (existing.getAuthProvider() != providerEnum) {
+                    throw new IllegalStateException(
+                        "Este email ya está registrado con contraseña. Por favor inicia sesión con tu contraseña."
+                    );
+                }
+            }
+        }
+
+        // Crear nuevo usuario OAuth
+        Role customerRole = roleRepository.findByName(RoleName.CUSTOMER)
+                .orElseThrow(() -> new IllegalStateException("Rol CUSTOMER no encontrado"));
+
+        User u = new User();
+        u.setOauthId(oauthId);
+        u.setEmail(email);
+        u.setFirstName(firstName != null ? firstName : "Usuario");
+        u.setLastName(lastName != null ? lastName : "OAuth");
+        u.setVerified(true);
+        u.setAuthProvider(providerEnum);
+        u.setRoles(Set.of(customerRole));
+        return userRepository.save(u);
     }
 
     private AuthProvider mapProvider(String provider) {
