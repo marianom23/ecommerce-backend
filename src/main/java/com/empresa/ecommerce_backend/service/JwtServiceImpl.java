@@ -50,7 +50,7 @@ public class JwtServiceImpl implements JwtService {
     @Value("${spring.security.oauth2.client.registration.google.client-id}")
     private String googleClientId;
 
-    @Value("${spring.security.oauth2.client.registration.azure.client-id}")
+    @Value("${AZURE_CLIENT_ID}")
     private String azureClientId;
 
     @Value("${AZURE_AD_TENANT_ID}")
@@ -233,19 +233,19 @@ public class JwtServiceImpl implements JwtService {
         try {
             String issuer = switch (provider.toLowerCase()) {
                 case "google" -> "https://accounts.google.com";
-                case "microsoft", "azure-ad" -> "https://login.microsoftonline.com/" + azureTenantId + "/v2.0";
+                case "azure-ad" -> "https://login.microsoftonline.com/" + azureTenantId + "/v2.0";
                 default -> throw new RuntimeException("Proveedor no soportado");
             };
 
             String jwksUri = switch (provider.toLowerCase()) {
                 case "google" -> "https://www.googleapis.com/oauth2/v3/certs";
-                case "microsoft", "azure-ad" -> "https://login.microsoftonline.com/common/discovery/v2.0/keys";
+                case "azure-ad" -> "https://login.microsoftonline.com/common/discovery/v2.0/keys";
                 default -> throw new RuntimeException("Proveedor no soportado");
             };
 
             String expectedAudience = switch (provider.toLowerCase()) {
                 case "google" -> googleClientId;
-                case "microsoft", "azure-ad" -> azureClientId;
+                case "azure-ad" -> azureClientId;
                 default -> throw new RuntimeException("Proveedor no soportado para audience");
             };
 
