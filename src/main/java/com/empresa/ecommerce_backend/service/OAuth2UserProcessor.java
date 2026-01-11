@@ -131,6 +131,17 @@ public class OAuth2UserProcessor {
             return ServiceResult.ok(loginResponse);
 
 
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // Constraint de email duplicado en la BD
+            if (e.getMessage() != null && e.getMessage().contains("idx_users_email")) {
+                log.warn("OAuth login blocked: email already exists with different provider");
+                loginAttemptService.logAttempt(null, ip, false, "Email ya registrado");
+                return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                    "Este email ya está registrado con contraseña. Por favor inicia sesión con tu contraseña.");
+            }
+            // Otro tipo de constraint violation
+            log.error("Data integrity violation during OAuth login", e);
+            return ServiceResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error al procesar el login");
         } catch (IllegalStateException e) {
             log.warn("OAuth login conflict: {}", e.getMessage());
             loginAttemptService.logAttempt(null, ip, false, e.getMessage());
