@@ -286,7 +286,7 @@ public class JwtServiceImpl implements JwtService {
         try {
             String jwksUri = switch (provider.toLowerCase()) {
                 case "google" -> "https://www.googleapis.com/oauth2/v3/certs";
-                case "azure-ad" -> "https://login.microsoftonline.com/common/discovery/v2.0/keys";
+                case "microsoft", "azure-ad", "azure_ad" -> "https://login.microsoftonline.com/common/discovery/v2.0/keys";
                 default -> throw new RuntimeException("Proveedor no soportado");
             };
 
