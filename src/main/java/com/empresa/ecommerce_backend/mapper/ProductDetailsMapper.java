@@ -73,7 +73,7 @@ public interface ProductDetailsMapper {
 
     default BigDecimal applyTransferDiscount(BigDecimal amount) {
         if (amount == null) return null;
-        BigDecimal discount = amount.multiply(new BigDecimal("0.10"));
+        BigDecimal discount = amount.multiply(new BigDecimal("0.05"));
         return amount.subtract(discount).setScale(2, RoundingMode.HALF_UP);
     }
 

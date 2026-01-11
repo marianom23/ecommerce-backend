@@ -339,7 +339,7 @@ public class OrderServiceImpl implements OrderService {
         // Descuento por método de pago (Transferencia = 10% off)
         BigDecimal discountTotal = BigDecimal.ZERO;
         if (o.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
-            discountTotal = subTotal.multiply(new BigDecimal("0.10"));
+            discountTotal = subTotal.multiply(new BigDecimal("0.05"));
         }
         
         // Si hubiera otros descuentos (cupones), se sumarían aquí

@@ -103,7 +103,7 @@ public interface ProductMapper {
         BigDecimal discounted = computeDiscountedPrice(p);
         if (discounted == null) return null;
         // 10% de descuento adicional
-        BigDecimal transferDiscount = discounted.multiply(new BigDecimal("0.10"));
+        BigDecimal transferDiscount = discounted.multiply(new BigDecimal("0.05"));
         return discounted.subtract(transferDiscount).setScale(2, RoundingMode.HALF_UP);
     }
 
