@@ -130,6 +130,11 @@ public class OAuth2UserProcessor {
             LoginResponse loginResponse = userMapper.toLoginResponse(user, jwt, expiresAt);
             return ServiceResult.ok(loginResponse);
 
+
+        } catch (IllegalStateException e) {
+            log.warn("OAuth login conflict: {}", e.getMessage());
+            loginAttemptService.logAttempt(null, ip, false, e.getMessage());
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
             log.error("Error al verificar ID token", e);
             loginAttemptService.logAttempt(null, ip, false, "Error al verificar ID token");
