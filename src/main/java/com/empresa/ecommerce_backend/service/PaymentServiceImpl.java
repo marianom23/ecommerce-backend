@@ -38,6 +38,7 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final MetaPixelService metaPixelService;
 
+    private final UserRepository userRepo; // Inject UserRepository
     private final OrderRepository orderRepo;
     private final PaymentRepository paymentRepo;
     private final PaymentEventRepository paymentEventRepo;
@@ -70,12 +71,12 @@ public class PaymentServiceImpl implements PaymentService {
         p.setMethod(method);
         p.setStatus(PaymentStatus.INITIATED);
         LocalDateTime expiration = switch (method) {
-            case BANK_TRANSFER -> LocalDateTime.now().plusHours(2);  // 2 horas para hacer la transferencia
+            case BANK_TRANSFER -> LocalDateTime.now().plusHours(2); // 2 horas para hacer la transferencia
             case CASH -> LocalDateTime.now().plusHours(48);
             default -> LocalDateTime.now().plusMinutes(30); // MercadoPago, Card, etc.
-        }; 
+        };
         p.setExpiresAt(expiration);
-        
+
         // 👇 Capture User Context for Meta (IP, UA, Cookies)
         try {
             var attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
@@ -83,7 +84,7 @@ public class PaymentServiceImpl implements PaymentService {
                 HttpServletRequest req = attrs.getRequest();
                 p.setClientIp(metaPixelService.extractClientIp(req));
                 p.setUserAgent(req.getHeader("User-Agent"));
-                
+
                 var cookies = metaPixelService.extractFbpFbc(req);
                 p.setFbp(cookies.get(0));
                 p.setFbc(cookies.get(1));
@@ -107,7 +108,7 @@ public class PaymentServiceImpl implements PaymentService {
         orderRepo.save(o);
 
         saveEvent(p, null, PaymentStatus.INITIATED, "system", "payment initiated");
-        
+
         // 📧 Notificar nueva orden
         emailService.sendOrderConfirmation(o.getId());
 
@@ -119,25 +120,30 @@ public class PaymentServiceImpl implements PaymentService {
     public Order handleGatewayWebhook(String provider, Map<String, Object> payload) {
         // 1) sacar payment_id del payload (body o query merged por el controller)
         String paymentId = extractMpPaymentId(payload);
-        if (paymentId == null) return null;
+        if (paymentId == null)
+            return null;
 
         // 2) consultar a MP el pago
         MpPayment mp = getMpPayment(paymentId);
-        if (mp == null) return null;
+        if (mp == null)
+            return null;
 
         // 3) Resolver orden por external_reference = "order-<id>"
         String extRef = mp.external_reference();
-        if (extRef == null || !extRef.startsWith("order-")) return null;
+        if (extRef == null || !extRef.startsWith("order-"))
+            return null;
         Long orderId = Long.valueOf(extRef.substring("order-".length()));
 
         Order o = orderRepo.findByIdWithLock(orderId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
 
         Payment p = o.getPayment();
-        if (p == null) throw new IllegalStateException("La orden no tiene Payment");
+        if (p == null)
+            throw new IllegalStateException("La orden no tiene Payment");
 
         // Enlazá el payment_id real si aún no lo guardaste
-        if (p.getProviderPaymentId() == null) p.setProviderPaymentId(mp.id());
+        if (p.getProviderPaymentId() == null)
+            p.setProviderPaymentId(mp.id());
 
         PaymentStatus newStatus = switch (mp.status()) {
             case "approved" -> PaymentStatus.APPROVED;
@@ -156,15 +162,19 @@ public class PaymentServiceImpl implements PaymentService {
 
             switch (newStatus) {
                 case APPROVED -> {
+                    // 👇 Try to link guest order to user if email matches
+                    tryLinkOrderToUser(o);
+
                     // 👇 Marcar orden como pagada + timestamp y registrar ventas
-                    if (o.getPaidAt() == null) o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
+                    if (o.getPaidAt() == null)
+                        o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
                     o.setStatus(OrderStatus.PAID);
                     registerSale(o); // 👈 NUEVO: suma soldCount en variant y product
                     orderRepo.save(o);
-                    
+
                     // 📧 Notificar pago aprobado
                     emailService.sendPaymentApprovedNotification(o.getId());
-                    
+
                     // 📊 EVENTO PURCHASE (Meta)
                     // Usar datos guardados en Payment p para "impersonar" al usuario original
                     String userIp = (p.getClientIp() != null) ? p.getClientIp() : "0.0.0.0";
@@ -173,25 +183,25 @@ public class PaymentServiceImpl implements PaymentService {
                     String fbc = p.getFbc();
 
                     metaPixelService.sendEvent(
-                        "Purchase",
-                        userIp,
-                        userAgent,
-                        frontBaseUrl + "/checkout/success", // URL lógica de éxito
-                        java.util.Arrays.asList(fbp, fbc),
-                        o.getUser(),
-                        o.getTotalAmount().doubleValue(),
-                        "ARS",
-                        "order-" + o.getOrderNumber()
-                    );
-                    
-                    return o; 
+                            "Purchase",
+                            userIp,
+                            userAgent,
+                            frontBaseUrl + "/checkout/success", // URL lógica de éxito
+                            java.util.Arrays.asList(fbp, fbc),
+                            o.getUser(),
+                            o.getTotalAmount().doubleValue(),
+                            "ARS",
+                            "order-" + o.getOrderNumber());
+
+                    return o;
                 }
                 case REJECTED, CANCELED, EXPIRED -> {
                     rollbackStock(o);
                     o.setStatus(OrderStatus.CANCELED);
                     orderRepo.save(o);
                 }
-                default -> { /* pending: no tocar orden */ }
+                default -> {
+                    /* pending: no tocar orden */ }
             }
         }
         return null;
@@ -199,8 +209,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> confirmBankTransferByUser(Long orderId, Long userId, String reference, String receiptUrl) {
-        Order o = orderRepo.findByIdAndUserId(orderId, userId)
+    public ServiceResult<OrderResponse> confirmBankTransferByOrderNumber(String orderNumber, String reference,
+            String receiptUrl) {
+        Order o = orderRepo.findByOrderNumber(orderNumber)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
         Payment p = mustPayment(o, PaymentMethod.BANK_TRANSFER);
 
@@ -215,7 +226,7 @@ public class PaymentServiceImpl implements PaymentService {
         p.setStatus(PaymentStatus.PENDING);
         p.setTransferReference(reference);
         p.setReceiptUrl(receiptUrl);
-        p.setExpiresAt(LocalDateTime.now().plusHours(48));  // 48 horas para que admin revise
+        p.setExpiresAt(LocalDateTime.now().plusHours(48)); // 48 horas para que admin revise
         paymentRepo.save(p);
 
         if (o.getStatus() == OrderStatus.PENDING) {
@@ -223,11 +234,11 @@ public class PaymentServiceImpl implements PaymentService {
             orderRepo.save(o);
         }
 
-        saveEvent(p, prev, PaymentStatus.PENDING, "user", "user marked bank transfer done");
-        
+        saveEvent(p, prev, PaymentStatus.PENDING, "user/guest", "transfer confirmed via orderNumber");
+
         // 📧 Notificar al admin que hay una transferencia para revisar
         emailService.sendTransferPendingAdminNotification(o.getId(), p.getId());
-        
+
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
 
@@ -248,11 +259,15 @@ public class PaymentServiceImpl implements PaymentService {
         paymentRepo.save(p);
 
         if (approve) {
+            // 👇 Try to link guest order to user if email matches
+            tryLinkOrderToUser(o);
+
             // 👇 Marcar orden como pagada + timestamp y registrar ventas
-            if (o.getPaidAt() == null) o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
+            if (o.getPaidAt() == null)
+                o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
             o.setStatus(OrderStatus.PAID);
             registerSale(o); // 👈 NUEVO
-            
+
             // 📧 Notificar pago aprobado
             emailService.sendPaymentApprovedNotification(o.getId());
 
@@ -263,16 +278,15 @@ public class PaymentServiceImpl implements PaymentService {
             String fbc = p.getFbc();
 
             metaPixelService.sendEvent(
-                "Purchase",
-                userIp,
-                userAgent,
-                frontBaseUrl + "/checkout/success", 
-                java.util.Arrays.asList(fbp, fbc),
-                o.getUser(),
-                o.getTotalAmount().doubleValue(),
-                "ARS",
-                "order-" + o.getOrderNumber()
-            );
+                    "Purchase",
+                    userIp,
+                    userAgent,
+                    frontBaseUrl + "/checkout/success",
+                    java.util.Arrays.asList(fbp, fbc),
+                    o.getUser(),
+                    o.getTotalAmount().doubleValue(),
+                    "ARS",
+                    "order-" + o.getOrderNumber());
 
         } else {
             rollbackStock(o);
@@ -285,11 +299,13 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void registerSale(Order o) {
-        if (o.getItems() == null) return;
+        if (o.getItems() == null)
+            return;
 
         for (OrderItem oi : o.getItems()) {
             var v = oi.getVariant();
-            if (v == null) continue;
+            if (v == null)
+                continue;
             var product = v.getProduct();
             int qty = oi.getQuantity();
 
@@ -349,10 +365,10 @@ public class PaymentServiceImpl implements PaymentService {
             rollbackStock(o);
             o.setStatus(OrderStatus.CANCELED);
             orderRepo.save(o);
-            
+
             // 📧 Notificar al usuario que su orden expiró
             emailService.sendPaymentExpiredNotification(o.getId());
-            
+
             n++;
         }
         return n;
@@ -379,21 +395,26 @@ public class PaymentServiceImpl implements PaymentService {
 
         var om = new com.fasterxml.jackson.databind.ObjectMapper();
 
-        Map<String,Object> item = Map.of(
+        Map<String, Object> item = Map.of(
                 "title", "Orden " + order.getId(),
                 "quantity", 1,
                 "currency_id", "ARS",
-                "unit_price", order.getTotalAmount()
-        );
-        Map<String,Object> pref = new java.util.LinkedHashMap<>();
+                "unit_price", order.getTotalAmount());
+        Map<String, Object> pref = new java.util.LinkedHashMap<>();
         pref.put("items", java.util.List.of(item));
-        pref.put("payer", Map.of("email", order.getUser().getEmail()));
+
+        // Usar guestEmail si es guest, sino email del usuario
+        String payerEmail = order.getUser() != null
+                ? order.getUser().getEmail()
+                : order.getGuestEmail();
+        pref.put("payer", Map.of("email", payerEmail));
         pref.put("back_urls", Map.of("success", success, "failure", failure, "pending", pending));
         pref.put("notification_url", mpWebhookUrl);
         pref.put("external_reference", "order-" + order.getId());
         pref.put("binary_mode", true);
 
-        // Solo enviar auto_return si la base es HTTPS (evita el invalid_auto_return en dev)
+        // Solo enviar auto_return si la base es HTTPS (evita el invalid_auto_return en
+        // dev)
         if (base.startsWith("https://")) {
             pref.put("auto_return", "approved");
         }
@@ -405,21 +426,23 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalStateException("No se pudo serializar la preferencia", e);
         }
 
-        var req = java.net.http.HttpRequest.newBuilder(java.net.URI.create("https://api.mercadopago.com/checkout/preferences"))
+        var req = java.net.http.HttpRequest
+                .newBuilder(java.net.URI.create("https://api.mercadopago.com/checkout/preferences"))
                 .header("Authorization", "Bearer " + mpAccessToken)
                 .header("Content-Type", "application/json")
                 .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
                 .build();
 
         try {
-            var res = java.net.http.HttpClient.newHttpClient().send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+            var res = java.net.http.HttpClient.newHttpClient().send(req,
+                    java.net.http.HttpResponse.BodyHandlers.ofString());
             if (res.statusCode() / 100 != 2) {
                 System.err.println("[MP preference body] " + body); // 👈 imprime lo que MP recibió
                 throw new IllegalStateException("Error creando preference MP: " + res.body());
             }
             var node = om.readTree(res.body());
             String initPoint = node.path("init_point").asText(null);
-            String prefId    = node.path("id").asText(null);
+            String prefId = node.path("id").asText(null);
             if (initPoint == null || prefId == null) {
                 throw new IllegalStateException("Respuesta MP inválida: " + res.body());
             }
@@ -429,8 +452,7 @@ public class PaymentServiceImpl implements PaymentService {
             p.setProviderPaymentId(null);
             p.setProviderMetadata(om.writeValueAsString(Map.of(
                     "init_point", initPoint,
-                    "preference_id", prefId
-            )));
+                    "preference_id", prefId)));
         } catch (java.io.IOException e) {
             throw new IllegalStateException("Fallo IO inicializando Mercado Pago", e);
         } catch (InterruptedException e) {
@@ -439,13 +461,14 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
-
-    private String extractMpPaymentId(Map<String,Object> payload) {
-        // body: { "type":"payment", "data":{"id":"123"} } ó { "action":"payment.created", "data":{"id":"123"} }
+    private String extractMpPaymentId(Map<String, Object> payload) {
+        // body: { "type":"payment", "data":{"id":"123"} } ó {
+        // "action":"payment.created", "data":{"id":"123"} }
         Object data = payload.get("data");
-        if (data instanceof Map<?,?> m) {
+        if (data instanceof Map<?, ?> m) {
             Object id = m.get("id");
-            if (id != null) return String.valueOf(id);
+            if (id != null)
+                return String.valueOf(id);
         }
         // query mergeada por el controller: ?topic=payment&id=123
         Object topic = payload.get("topic");
@@ -458,7 +481,8 @@ public class PaymentServiceImpl implements PaymentService {
         if (resource != null) {
             String r = String.valueOf(resource);
             int i = r.lastIndexOf('/');
-            if (i > -1) return r.substring(i + 1);
+            if (i > -1)
+                return r.substring(i + 1);
         }
         return null;
     }
@@ -470,27 +494,30 @@ public class PaymentServiceImpl implements PaymentService {
                     .GET()
                     .build();
             var res = HttpClient.newHttpClient().send(req, HttpResponse.BodyHandlers.ofString());
-            if (res.statusCode() / 100 != 2) return null;
+            if (res.statusCode() / 100 != 2)
+                return null;
 
             var json = om.readTree(res.body());
             return new MpPayment(
                     json.path("id").asText(),
                     json.path("status").asText(),
-                    json.path("external_reference").asText(null)
-            );
+                    json.path("external_reference").asText(null));
         } catch (Exception e) {
             return null;
         }
     }
 
-    private record MpPayment(String id, String status, String external_reference) {}
+    private record MpPayment(String id, String status, String external_reference) {
+    }
 
     // ===== comunes =====
 
     private Payment mustPayment(Order o, PaymentMethod expected) {
         Payment p = o.getPayment();
-        if (p == null) throw new IllegalStateException("La orden no tiene Payment");
-        if (p.getMethod() != expected) throw new IllegalStateException("Método de pago inválido");
+        if (p == null)
+            throw new IllegalStateException("La orden no tiene Payment");
+        if (p.getMethod() != expected)
+            throw new IllegalStateException("Método de pago inválido");
         return p;
     }
 
@@ -510,7 +537,8 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void rollbackStock(Order o) {
-        if (o.getItems() == null) return;
+        if (o.getItems() == null)
+            return;
         o.getItems().forEach(oi -> {
             var v = oi.getVariant();
             if (v != null) {
@@ -521,5 +549,20 @@ public class PaymentServiceImpl implements PaymentService {
                 }
             }
         });
+
+    }
+
+    /**
+     * Intenta vincular una orden de invitado a un usuario existente
+     * si el email de la orden coincide con el de un usuario registrado.
+     */
+    private void tryLinkOrderToUser(Order o) {
+        if (o.getUser() == null && o.getGuestEmail() != null) {
+            userRepo.findByEmail(o.getGuestEmail()).ifPresent(user -> {
+                o.setUser(user);
+                // Opcional: limpiar guestEmail o dejarlo como histórico
+                // o.setGuestEmail(null);
+            });
+        }
     }
 }

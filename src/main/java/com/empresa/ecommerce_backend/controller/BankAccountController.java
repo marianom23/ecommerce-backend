@@ -18,13 +18,13 @@ public class BankAccountController {
 
     private final BankAccountService service;
 
-    // Público: para mostrar en el checkout
+    // Public: Get all active bank accounts (for checkout)
     @GetMapping
     public ServiceResult<List<BankAccountResponse>> getActiveAccounts() {
         return service.getAllActive();
     }
 
-    // Admin: listar todas (incluso inactivas)
+    // Admin: Get all accounts (including inactive)
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/admin")
     public ServiceResult<List<BankAccountResponse>> getAllAccounts() {
@@ -39,19 +39,20 @@ public class BankAccountController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
-    public ServiceResult<BankAccountResponse> create(@RequestBody @Valid BankAccountRequest request) {
+    public ServiceResult<BankAccountResponse> create(@Valid @RequestBody BankAccountRequest request) {
         return service.create(request);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
-    public ServiceResult<BankAccountResponse> update(@PathVariable Long id, @RequestBody @Valid BankAccountRequest request) {
+    public ServiceResult<BankAccountResponse> update(@PathVariable Long id,
+            @Valid @RequestBody BankAccountRequest request) {
         return service.update(id, request);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}/toggle")
-    public ServiceResult<BankAccountResponse> toggle(@PathVariable Long id) {
+    public ServiceResult<BankAccountResponse> toggleActive(@PathVariable Long id) {
         return service.toggleActive(id);
     }
 

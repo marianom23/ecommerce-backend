@@ -12,7 +12,8 @@ public interface PaymentService {
 
     ServiceResult<OrderResponse> initPaymentForOrder(Order order, PaymentMethod method);
 
-    ServiceResult<OrderResponse> confirmBankTransferByUser(Long orderId, Long userId, String reference, String receiptUrl);
+    ServiceResult<OrderResponse> confirmBankTransferByOrderNumber(String orderNumber, String reference,
+            String receiptUrl);
 
     ServiceResult<OrderResponse> reviewBankTransferByAdmin(Long orderId, boolean approve, String note);
 

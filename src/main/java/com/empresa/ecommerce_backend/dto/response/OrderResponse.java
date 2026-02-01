@@ -8,7 +8,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class OrderResponse {
     private Long id;
     private String orderNumber;
@@ -50,8 +54,11 @@ public class OrderResponse {
     private String billingCountry;
     private String billingApartmentNumber;
     private String billingFloor;
-    private String chosenPaymentMethod;   // CARD, MERCADO_PAGO, etc.
+    private String chosenPaymentMethod; // CARD, MERCADO_PAGO, etc.
     private PaymentSummaryResponse payment; // puede venir null
+
+    // Indica si la orden requiere dirección de envío (false para solo digitales)
+    private Boolean requiresShipping;
 
     private List<OrderItemResponse> items;
 }

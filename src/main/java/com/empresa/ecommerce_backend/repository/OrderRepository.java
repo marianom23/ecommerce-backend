@@ -29,38 +29,37 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
 
     // === Summaries sin filtro (por si lo usás en admin) ===
     @Query("""
-      select 
-         o.id as id,
-         o.orderNumber as orderNumber,
-         o.orderDate as orderDate,
-         o.status as status,
-         o.totalAmount as totalAmount,
-         (select count(oi) from OrderItem oi where oi.order.id = o.id) as itemCount,
-         null as firstItemThumb
-      from Order o
-      where o.user.id = :userId
-      """)
+            select
+               o.id as id,
+               o.orderNumber as orderNumber,
+               o.orderDate as orderDate,
+               o.status as status,
+               o.totalAmount as totalAmount,
+               (select count(oi) from OrderItem oi where oi.order.id = o.id) as itemCount,
+               null as firstItemThumb
+            from Order o
+            where o.user.id = :userId
+            """)
     Page<OrderSummaryProjection> findSummariesByUserId(@Param("userId") Long userId, Pageable pageable);
 
     // === Summaries EXCLUYENDO un estado (lo usaremos con PENDING) ===
     @Query("""
-      select 
-         o.id as id,
-         o.orderNumber as orderNumber,
-         o.orderDate as orderDate,
-         o.status as status,
-         o.totalAmount as totalAmount,
-         (select count(oi) from OrderItem oi where oi.order.id = o.id) as itemCount,
-         null as firstItemThumb
-      from Order o
-      where o.user.id = :userId
-        and o.status <> :excludedStatus
-      """)
+            select
+               o.id as id,
+               o.orderNumber as orderNumber,
+               o.orderDate as orderDate,
+               o.status as status,
+               o.totalAmount as totalAmount,
+               (select count(oi) from OrderItem oi where oi.order.id = o.id) as itemCount,
+               null as firstItemThumb
+            from Order o
+            where o.user.id = :userId
+              and o.status <> :excludedStatus
+            """)
     Page<OrderSummaryProjection> findSummariesByUserIdExcludingStatus(
             @Param("userId") Long userId,
             @Param("excludedStatus") OrderStatus excludedStatus,
-            Pageable pageable
-    );
+            Pageable pageable);
 
     Optional<Order> findByOrderNumberAndUserId(String orderNumber, Long userId);
 
@@ -76,7 +75,7 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
 
     List<Order> findByOrderDateBetween(LocalDateTime from, LocalDateTime to);
 
-    @EntityGraph(attributePaths = {"items", "items.variant", "items.variant.product"})
+    @EntityGraph(attributePaths = { "items", "items.variant", "items.variant.product" })
     Optional<Order> findWithItemsById(Long id);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
@@ -84,17 +83,27 @@ public interface OrderRepository extends BaseRepository<Order, Long> {
     Optional<Order> findByIdWithLock(@Param("id") Long id);
 
     @Query("SELECT o.shippingAddress.state, COUNT(o), SUM(o.totalAmount) " +
-           "FROM Order o " +
-           "WHERE o.status <> 'CANCELLED' " +
-           "AND o.shippingAddress.state IS NOT NULL " +
-           "GROUP BY o.shippingAddress.state " +
-           "ORDER BY SUM(o.totalAmount) DESC")
+            "FROM Order o " +
+            "WHERE o.status <> 'CANCELLED' " +
+            "AND o.shippingAddress.state IS NOT NULL " +
+            "GROUP BY o.shippingAddress.state " +
+            "ORDER BY SUM(o.totalAmount) DESC")
     List<Object[]> countAndSumByState();
 
     @Query("SELECT EXTRACT(MONTH FROM o.orderDate), EXTRACT(YEAR FROM o.orderDate), COUNT(o), SUM(o.totalAmount) " +
-           "FROM Order o " +
-           "WHERE o.status <> 'CANCELLED' " +
-           "GROUP BY EXTRACT(YEAR FROM o.orderDate), EXTRACT(MONTH FROM o.orderDate) " +
-           "ORDER BY EXTRACT(YEAR FROM o.orderDate) DESC, EXTRACT(MONTH FROM o.orderDate) DESC")
+            "FROM Order o " +
+            "WHERE o.status <> 'CANCELLED' " +
+            "GROUP BY EXTRACT(YEAR FROM o.orderDate), EXTRACT(MONTH FROM o.orderDate) " +
+            "ORDER BY EXTRACT(YEAR FROM o.orderDate) DESC, EXTRACT(MONTH FROM o.orderDate) DESC")
     List<Object[]> findMonthlySales();
+
+    // === Guest checkout queries ===
+    List<Order> findByGuestEmailOrderByCreatedAtDesc(String guestEmail);
+
+    Optional<Order> findByOrderNumberAndGuestEmail(String orderNumber, String guestEmail);
+
+    @Query("SELECT o FROM Order o WHERE o.guestEmail = :email AND o.status <> 'PENDING'")
+    List<Order> findCompletedGuestOrdersByEmail(@Param("email") String email);
+
+    List<Order> findByGuestEmailAndUserIsNull(String guestEmail);
 }

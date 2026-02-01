@@ -1,4 +1,3 @@
-// src/main/java/com/empresa/ecommerce_backend/controller/PaymentController.java
 package com.empresa.ecommerce_backend.controller;
 
 import com.empresa.ecommerce_backend.dto.request.BankTransferAdminReviewRequest;
@@ -17,19 +16,16 @@ import java.util.Map;
 public class PaymentController {
 
     private final PaymentService paymentService;
-    private final com.empresa.ecommerce_backend.service.MetaPixelService metaPixelService;
 
     // Usuario confirma que hizo la transferencia
-    @PostMapping("/orders/{orderId}/bank-transfer/confirm")
+    // Usuario/Guest confirma que hizo la transferencia (usando Order Number)
+    @PostMapping("/orders/{orderNumber}/bank-transfer/confirm")
     public ServiceResult<OrderResponse> userConfirmBankTransfer(
-            @PathVariable Long orderId,
-            @RequestBody(required = false) BankTransferUserConfirmRequest req
-    ) {
-        // Obtener userId desde SecurityContext
-        Long userId = getCurrentUserId();
+            @PathVariable String orderNumber,
+            @RequestBody(required = false) BankTransferUserConfirmRequest req) {
         String reference = req != null ? req.getReference() : null;
         String receiptUrl = req != null ? req.getReceiptUrl() : null;
-        return paymentService.confirmBankTransferByUser(orderId, userId, reference, receiptUrl);
+        return paymentService.confirmBankTransferByOrderNumber(orderNumber, reference, receiptUrl);
     }
 
     // Admin aprueba/rechaza la transferencia
@@ -37,23 +33,15 @@ public class PaymentController {
     @PostMapping("/orders/{orderId}/bank-transfer/review")
     public ServiceResult<OrderResponse> adminReviewBankTransfer(
             @PathVariable Long orderId,
-            @RequestBody BankTransferAdminReviewRequest req,
-            jakarta.servlet.http.HttpServletRequest request
-    ) {
-        ServiceResult<OrderResponse> result = paymentService.reviewBankTransferByAdmin(orderId, req.isApprove(), req.getNote());
-        
-        // 📊 Si se aprobó, el Service ya envía el evento a Meta.
-        // metaPixelService.sendEvent(...) REMOVED
-        
-        return result;
+            @RequestBody BankTransferAdminReviewRequest req) {
+        return paymentService.reviewBankTransferByAdmin(orderId, req.isApprove(), req.getNote());
     }
 
     // Cancelar pago (user/admin)
     @PostMapping("/orders/{orderId}/cancel")
     public ServiceResult<OrderResponse> cancelPayment(
             @PathVariable Long orderId,
-            @RequestBody(required = false) Map<String, String> body
-    ) {
+            @RequestBody(required = false) Map<String, String> body) {
         String note = body != null ? body.get("note") : null;
         String who = "user"; // o "admin" según endpoint/rol
         return paymentService.cancelPayment(orderId, who, note);
@@ -63,27 +51,10 @@ public class PaymentController {
     @PostMapping("/webhook/mercadopago")
     public String mpWebhook(
             @RequestBody Map<String, Object> payload,
-            @RequestHeader Map<String, String> headers,
-            jakarta.servlet.http.HttpServletRequest request
-    ) {
+            @RequestHeader Map<String, String> headers) {
         // TODO: validar firma
-        com.empresa.ecommerce_backend.model.Order order = paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
-        
-        // 📊 Si el pago se aprueba, el Service (handleGatewayWebhook) envía el evento a Meta.
-        // metaPixelService.sendEvent(...) REMOVED
-        
+        paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
         return "ok";
     }
 
-    private Long getCurrentUserId() {
-        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getPrincipal() == null) {
-            throw new IllegalArgumentException("No autenticado.");
-        }
-        try {
-            return (Long) auth.getPrincipal().getClass().getMethod("getId").invoke(auth.getPrincipal());
-        } catch (Exception e) {
-            throw new IllegalStateException("No se pudo obtener ID de usuario autenticado");
-        }
-    }
 }

@@ -27,119 +27,135 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtAuthenticationFilter jwtAuthenticationFilter;
-    private final CustomOAuth2SuccessHandler oAuth2SuccessHandler;
+        private final JwtAuthenticationFilter jwtAuthenticationFilter;
+        private final CustomOAuth2SuccessHandler oAuth2SuccessHandler;
 
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        http
-                .cors(c -> c.configurationSource(corsConfigurationSource()))
-                .csrf(csrf -> csrf.disable())
+        @Bean
+        public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+                http
+                                .cors(c -> c.configurationSource(corsConfigurationSource()))
+                                .csrf(csrf -> csrf.disable())
 
-                // 🔥 Nada de guardar seguridad en sesión
-                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                                // 🔥 Nada de guardar seguridad en sesión
+                                .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-                // 🔥 Cuando no hay auth, devolvé 401 JSON (no redirección a /login)
-                .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((request, response, authException) -> {
-                            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                            response.setContentType("application/json");
-                            response.getWriter().write("{\"message\":\"UNAUTHORIZED\"}");
-                        })
-                )
+                                // 🔥 Cuando no hay auth, devolvé 401 JSON (no redirección a /login)
+                                .exceptionHandling(ex -> ex
+                                                .authenticationEntryPoint((request, response, authException) -> {
+                                                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                                                        response.setContentType("application/json");
+                                                        response.getWriter().write("{\"message\":\"UNAUTHORIZED\"}");
+                                                }))
 
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/api/login",
-                                "/api/register",
-                                "/api/verify-email",
-                                "/api/auth/refresh",
-                                "/swagger-ui/**",
-                                "/api-docs/**",
-                                "/api/oauth2/callback"
-                        ).permitAll()
+                                .authorizeHttpRequests(auth -> auth
+                                                .requestMatchers(
+                                                                "/api/login",
+                                                                "/api/register",
+                                                                "/api/verify-email",
+                                                                "/api/auth/refresh",
+                                                                "/swagger-ui/**",
+                                                                "/api-docs/**",
+                                                                "/api/oauth2/callback")
+                                                .permitAll()
 
-                        // ya NO necesitamos /login/**, lo podés quitar
-                        .requestMatchers("/oauth2/**").permitAll()
+                                                // ya NO necesitamos /login/**, lo podés quitar
+                                                .requestMatchers("/oauth2/**").permitAll()
 
-                        .requestMatchers(HttpMethod.POST, "/api/webhooks/mercadopago").permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/api/webhooks/mercadopago",
+                                                                "/api/payments/webhook/mercadopago")
+                                                .permitAll()
 
-                        .requestMatchers("/api/cart/attach").authenticated()
-                        .requestMatchers("/api/cart/**").permitAll()
+                                                .requestMatchers("/api/cart/attach").authenticated()
+                                                .requestMatchers("/api/cart/**").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/api/banners/**").permitAll()
-                        .requestMatchers(HttpMethod.OPTIONS, "/api/banners/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/banners/**").permitAll()
+                                                .requestMatchers(HttpMethod.OPTIONS, "/api/banners/**").permitAll()
 
-                        .requestMatchers(HttpMethod.GET, "/products/**").permitAll()
-                        .requestMatchers(HttpMethod.OPTIONS, "/products/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
-                        .requestMatchers(HttpMethod.OPTIONS, "/api/products/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/products/**").permitAll()
+                                                .requestMatchers(HttpMethod.OPTIONS, "/products/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
+                                                .requestMatchers(HttpMethod.OPTIONS, "/api/products/**").permitAll()
 
-                        .requestMatchers(HttpMethod.POST,   "/api/products/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT,    "/api/products/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.POST,   "/api/variants/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.PUT,    "/api/variants/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/variants/**").hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.POST, "/api/products/**").hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.PUT, "/api/products/**").hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.DELETE, "/api/products/**").hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.POST, "/api/variants/**").hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.PUT, "/api/variants/**").hasRole("ADMIN")
+                                                .requestMatchers(HttpMethod.DELETE, "/api/variants/**").hasRole("ADMIN")
 
-                        // Reviews: GET público para ver reviews, POST/PUT/DELETE requieren auth
-                        .requestMatchers(HttpMethod.GET, "/api/reviews/product/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/reviews/user/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/reviews/best").permitAll() // 👈 NUEVO
-                        .requestMatchers(HttpMethod.OPTIONS, "/api/reviews/**").permitAll()
+                                                // Reviews: GET público para ver reviews, POST/PUT/DELETE requieren auth
+                                                .requestMatchers(HttpMethod.GET, "/api/reviews/product/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/reviews/user/**").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/reviews/best").permitAll()
+                                                .requestMatchers(HttpMethod.OPTIONS, "/api/reviews/**").permitAll()
 
-                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers("/api/manager/**").hasAnyRole("ADMIN", "MANAGER")
-                        .requestMatchers("/api/suppliers/**").hasRole("ADMIN")
+                                                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                                                .requestMatchers("/api/manager/**").hasAnyRole("ADMIN", "MANAGER")
+                                                .requestMatchers("/api/suppliers/**").hasRole("ADMIN")
 
-                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                                                // Guest checkout endpoints
+                                                .requestMatchers(HttpMethod.POST, "/api/orders").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/orders/*").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/orders/guest").permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/api/orders/by-number/**").permitAll()
+                                                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/shipping-address")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/billing-profile")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.PATCH, "/api/orders/*/payment-method")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.POST,
+                                                                "/api/payments/orders/*/bank-transfer/confirm")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.POST, "/api/orders/*/confirm").permitAll()
 
-                        .anyRequest().authenticated()
-                )
+                                                // Expose Bank Accounts
+                                                .requestMatchers(HttpMethod.GET, "/api/bank-accounts").permitAll()
 
-                // 🔥 Desactivamos login de formulario y basic auth
-                .formLogin(form -> form.disable())
-                .httpBasic(basic -> basic.disable())
+                                                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-                // Dejamos solo OAuth2 para el flujo de Google
-                .oauth2Login(oauth -> oauth
-                        .successHandler(oAuth2SuccessHandler)
-                );
+                                                .anyRequest().authenticated())
 
-        http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+                                // 🔥 Desactivamos login de formulario y basic auth
+                                .formLogin(form -> form.disable())
+                                .httpBasic(basic -> basic.disable())
 
-        return http.build();
-    }
+                                // Dejamos solo OAuth2 para el flujo de Google
+                                .oauth2Login(oauth -> oauth
+                                                .successHandler(oAuth2SuccessHandler));
 
+                http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
-    @Bean
-    public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
-            throws Exception {
-        return config.getAuthenticationManager();
-    }
+                return http.build();
+        }
 
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();
-    }
+        @Bean
+        public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
+                        throws Exception {
+                return config.getAuthenticationManager();
+        }
 
-    @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(
-                "http://localhost:3000",
-                "https://ecommerce-frontend-ebon-omega.vercel.app",
-                "https://hornerotech.com.ar",
-                "https://www.hornerotech.com.ar",
-                "https://ecommerce-backoffice-alpha.vercel.app"
-        ));
-        config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("*"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
+        @Bean
+        public PasswordEncoder passwordEncoder() {
+                return new BCryptPasswordEncoder();
+        }
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/**", config);
-        return source;
-    }
+        @Bean
+        public CorsConfigurationSource corsConfigurationSource() {
+                CorsConfiguration config = new CorsConfiguration();
+                config.setAllowedOrigins(List.of(
+                                "http://localhost:3000",
+                                "https://ecommerce-frontend-ebon-omega.vercel.app",
+                                "https://hornerotech.com.ar",
+                                "https://www.hornerotech.com.ar",
+                                "https://ecommerce-backoffice-alpha.vercel.app"));
+                config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
+                config.setAllowedHeaders(List.of("*"));
+                config.setAllowCredentials(true);
+                config.setMaxAge(3600L);
+
+                UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+                source.registerCorsConfiguration("/**", config);
+                return source;
+        }
 }

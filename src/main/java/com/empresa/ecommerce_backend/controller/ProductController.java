@@ -4,6 +4,7 @@ package com.empresa.ecommerce_backend.controller;
 import com.empresa.ecommerce_backend.dto.request.ProductPaginatedRequest;
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
 import com.empresa.ecommerce_backend.dto.response.*;
+import com.empresa.ecommerce_backend.dto.response.DigitalProductDTO;
 import com.empresa.ecommerce_backend.service.interfaces.ProductDetailsService;
 import com.empresa.ecommerce_backend.service.interfaces.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,7 +47,8 @@ public class ProductController {
     // GET /api/products?page=1&limit=12&sort=latest&q=zapato
     // Cuando viene "page" en la query, entra acá.
     @GetMapping(params = "page")
-    public ServiceResult<PaginatedResponse<ProductResponse>> getAllProductsPaged(@Valid ProductPaginatedRequest params) {
+    public ServiceResult<PaginatedResponse<ProductResponse>> getAllProductsPaged(
+            @Valid ProductPaginatedRequest params) {
         return productService.getAllProductsPaged(params);
     }
 
@@ -65,5 +67,10 @@ public class ProductController {
     @GetMapping("/facets")
     public ServiceResult<ProductFacetsResponse> getFacets(ProductPaginatedRequest params) {
         return productService.getProductFacets(params);
+    }
+
+    @GetMapping("/digital")
+    public ServiceResult<List<DigitalProductDTO>> getDigitalProducts() {
+        return productService.getDigitalProducts();
     }
 }

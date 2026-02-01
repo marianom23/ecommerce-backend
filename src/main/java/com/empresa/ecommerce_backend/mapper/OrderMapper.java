@@ -40,17 +40,32 @@ public interface OrderMapper {
             @Mapping(target = "billingApartmentNumber", source = "billingInfo.apartmentNumber"),
             @Mapping(target = "billingFloor", source = "billingInfo.floor"),
 
-            @Mapping(target = "chosenPaymentMethod",
-                    expression = "java(order.getChosenPaymentMethod() != null ? order.getChosenPaymentMethod().name() : null)"),
+            @Mapping(target = "chosenPaymentMethod", expression = "java(order.getChosenPaymentMethod() != null ? order.getChosenPaymentMethod().name() : null)"),
             @Mapping(target = "payment", expression = "java(toPaymentSummary(order.getPayment()))"),
+
+            @Mapping(target = "requiresShipping", expression = "java(calculateRequiresShipping(order))"),
 
             @Mapping(target = "items", expression = "java(toItemResponses(order.getItems()))")
     })
     OrderResponse toResponse(Order order);
 
+    // Calcular si requiere shipping
+    default Boolean calculateRequiresShipping(Order order) {
+        if (order == null || order.getItems() == null || order.getItems().isEmpty()) {
+            return false;
+        }
+        return order.getItems().stream()
+                .anyMatch(item -> {
+                    var ft = item.getVariant().getFulfillmentType();
+                    return ft != com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND
+                            && ft != com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_INSTANT;
+                });
+    }
+
     // ---------- NUEVO: Projection -> OrderSummaryResponse ----------
     default OrderSummaryResponse toSummary(OrderSummaryProjection p) {
-        if (p == null) return null;
+        if (p == null)
+            return null;
         return OrderSummaryResponse.builder()
                 .id(p.getId())
                 .orderNumber(p.getOrderNumber())
@@ -76,7 +91,8 @@ public interface OrderMapper {
 
     // ---------- Payment ----------
     default PaymentSummaryResponse toPaymentSummary(Payment payment) {
-        if (payment == null) return null;
+        if (payment == null)
+            return null;
 
         PaymentSummaryResponse dto = new PaymentSummaryResponse();
         dto.setMethod(payment.getMethod().name());
@@ -89,7 +105,8 @@ public interface OrderMapper {
                 var node = new com.fasterxml.jackson.databind.ObjectMapper().readTree(meta);
                 String initPoint = node.path("init_point").asText(null);
                 dto.setRedirectUrl(initPoint);
-            } catch (Exception ignored) { }
+            } catch (Exception ignored) {
+            }
         }
         return dto;
     }

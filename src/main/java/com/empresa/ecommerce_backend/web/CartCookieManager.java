@@ -20,13 +20,15 @@ public class CartCookieManager {
     private String cookieDomain;
 
     public void maybeSetSessionCookie(String existingSessionId,
-                                      ServiceResult<CartResponse> result,
-                                      HttpServletRequest request,
-                                      HttpServletResponse response) {
-        if (result == null || result.getData() == null) return;
+            ServiceResult<CartResponse> result,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        if (result == null || result.getData() == null)
+            return;
 
         String newSessionId = result.getData().getSessionId();
-        if (newSessionId == null || newSessionId.isBlank()) return;
+        if (newSessionId == null || newSessionId.isBlank())
+            return;
 
         boolean created = result.getStatus() != null && result.getStatus().is2xxSuccessful()
                 && result.getStatus().value() == 201;
@@ -45,7 +47,8 @@ public class CartCookieManager {
                 .path("/")
                 .maxAge(Duration.ofDays(30));
 
-        if (cookieDomain != null && !cookieDomain.isBlank()) {
+        // Solo setear dominio en producción
+        if (prod && cookieDomain != null && !cookieDomain.isBlank()) {
             b.domain(cookieDomain);
         }
 
@@ -65,7 +68,8 @@ public class CartCookieManager {
                 .path("/")
                 .maxAge(0); // elimina
 
-        if (cookieDomain != null && !cookieDomain.isBlank()) {
+        // Solo setear dominio en producción
+        if (prod && cookieDomain != null && !cookieDomain.isBlank()) {
             b.domain(cookieDomain);
         }
 
@@ -79,7 +83,8 @@ public class CartCookieManager {
 
     private boolean isProd() {
         String profile = System.getProperty("spring.profiles.active");
-        if (profile == null) profile = System.getenv("SPRING_PROFILES_ACTIVE");
+        if (profile == null)
+            profile = System.getenv("SPRING_PROFILES_ACTIVE");
         return "prod".equalsIgnoreCase(profile);
     }
 }

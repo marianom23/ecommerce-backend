@@ -24,6 +24,7 @@ public class PostLoginProcessor {
     private final JwtService jwtService;
     private final CartCookieManager cartCookieManager;
     private final RefreshTokenCookieManager refreshTokenCookieManager;
+    private final com.empresa.ecommerce_backend.service.interfaces.OrderService orderService;
 
     /**
      * Procesa un login exitoso: fusiona carrito, genera tokens, actualiza cookies.
@@ -36,18 +37,20 @@ public class PostLoginProcessor {
             cartCookieManager.maybeSetSessionCookie(guestSessionId, cartResult, request, response);
         }
 
-        // 2. Generar tokens
+        // 2. Vincular órdenes guest al usuario
+        orderService.linkGuestOrdersToUser(loginData.getEmail(), loginData.getId());
+
+        // 3. Generar tokens
         String accessToken = jwtService.generateAccessToken(
-            loginData.getId(), 
-            loginData.getEmail(), 
-            loginData.getRoles()
-        );
+                loginData.getId(),
+                loginData.getEmail(),
+                loginData.getRoles());
         String refreshToken = jwtService.generateRefreshToken(loginData.getId());
 
-        // 3. Setear refresh token en cookie HttpOnly
+        // 4. Setear refresh token en cookie HttpOnly
         refreshTokenCookieManager.setRefreshCookie(response, refreshToken, request.isSecure());
 
-        // 4. Actualizar response con access token
+        // 5. Actualizar response con access token
         loginData.setToken(accessToken);
     }
 

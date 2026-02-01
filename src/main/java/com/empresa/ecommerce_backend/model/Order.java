@@ -14,18 +14,18 @@ import java.time.LocalDateTime;
 import java.util.*;
 
 @Entity
-@Table(
-        name = "orders",
-        indexes = {
-                @Index(name = "idx_orders_number", columnList = "orderNumber", unique = true),
-                @Index(name = "idx_orders_user", columnList = "user_id"),
-                @Index(name = "idx_orders_date", columnList = "orderDate")
-        }
-)
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Table(name = "orders", indexes = {
+        @Index(name = "idx_orders_number", columnList = "orderNumber", unique = true),
+        @Index(name = "idx_orders_user", columnList = "user_id"),
+        @Index(name = "idx_orders_date", columnList = "orderDate"),
+        @Index(name = "idx_orders_guest_email", columnList = "guestEmail")
+})
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
-@ToString(exclude = {"user", "items", "shipments", "payment"})
+@ToString(exclude = { "user", "items", "shipments", "payment" })
 public class Order {
 
     @Id
@@ -43,33 +43,37 @@ public class Order {
     // Desglose de montos (recomendado)
     @Column(nullable = false, precision = 15, scale = 2)
     @NotNull
-    private BigDecimal subTotal;       // suma de lineas sin impuestos
+    private BigDecimal subTotal; // suma de lineas sin impuestos
 
     @Column(nullable = false, precision = 15, scale = 2)
     @NotNull
-    private BigDecimal shippingCost;   // costo de envío
+    private BigDecimal shippingCost; // costo de envío
 
     @Column(nullable = false, precision = 15, scale = 2)
     @NotNull
-    private BigDecimal taxAmount;      // impuestos
+    private BigDecimal taxAmount; // impuestos
 
     @Column(nullable = false, precision = 15, scale = 2)
     @NotNull
-    private BigDecimal discountTotal;  // descuentos a nivel pedido
+    private BigDecimal discountTotal; // descuentos a nivel pedido
 
     @Column(nullable = false, precision = 15, scale = 2)
     @NotNull
-    private BigDecimal totalAmount;    // total final (guardás el snapshot del total)
+    private BigDecimal totalAmount; // total final (guardás el snapshot del total)
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     @NotNull
     private OrderStatus status;
 
-    // Usuario
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
+    // Usuario (opcional para guest checkout)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "user_id", nullable = true)
     private User user;
+
+    // Email para órdenes de invitados (guest checkout)
+    @Column(name = "guest_email", length = 150)
+    private String guestEmail;
 
     // Ítems
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
@@ -138,7 +142,8 @@ public class Order {
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
-        if (this.orderDate == null) this.orderDate = this.createdAt;
+        if (this.orderDate == null)
+            this.orderDate = this.createdAt;
         if (this.orderNumber == null) {
             this.orderNumber = "ORD-" + UUID.randomUUID().toString().substring(0, 12).toUpperCase();
         }
@@ -147,5 +152,10 @@ public class Order {
     @PreUpdate
     public void preUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    // Helper para verificar si es orden de invitado
+    public boolean isGuestOrder() {
+        return this.user == null;
     }
 }

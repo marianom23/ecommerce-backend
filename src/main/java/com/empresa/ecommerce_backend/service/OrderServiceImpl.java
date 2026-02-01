@@ -2,6 +2,7 @@
 package com.empresa.ecommerce_backend.service;
 
 import com.empresa.ecommerce_backend.dto.request.ConfirmOrderRequest;
+import com.empresa.ecommerce_backend.dto.request.CreateOrderRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateBillingProfileRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdateOrderStatusRequest;
 import com.empresa.ecommerce_backend.dto.request.UpdatePaymentMethodRequest;
@@ -19,11 +20,13 @@ import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.OrderMapper;
 import com.empresa.ecommerce_backend.mapper.SnapshotMapper;
 import com.empresa.ecommerce_backend.model.*;
+import com.empresa.ecommerce_backend.model.embeddable.AddressSnapshot;
 import com.empresa.ecommerce_backend.model.embeddable.BillingSnapshot;
 import com.empresa.ecommerce_backend.repository.*;
 import com.empresa.ecommerce_backend.repository.projection.OrderSummaryProjection;
 import com.empresa.ecommerce_backend.service.interfaces.OrderService;
 import com.empresa.ecommerce_backend.service.interfaces.PaymentService;
+import com.empresa.ecommerce_backend.service.interfaces.CartService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -49,36 +52,70 @@ public class OrderServiceImpl implements OrderService {
     private final PaymentRepository paymentRepo;
     private final OrderMapper orderMapper;
     private final PaymentService paymentService;
+    private final CartService cartService;
 
     private Long currentUserId() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth == null || auth.getPrincipal() == null) throw new IllegalArgumentException("No autenticado.");
+        if (auth == null || auth.getPrincipal() == null)
+            return null; // Permitir guests
         try {
             return (Long) auth.getPrincipal().getClass().getMethod("getId").invoke(auth.getPrincipal());
         } catch (Exception e) {
-            throw new IllegalStateException("No se pudo obtener ID de usuario autenticado");
+            return null; // Guest checkout
         }
+    }
+
+    private boolean isAuthenticated() {
+        return currentUserId() != null;
     }
 
     @Override
     @Transactional(readOnly = true)
     public ServiceResult<OrderResponse> getOneByNumber(String orderNumber) {
         Long uid = currentUserId();
-        Order o = orderRepo.findByOrderNumberAndUserId(orderNumber, uid)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        Order o;
+        if (uid != null) {
+            o = orderRepo.findByOrderNumberAndUserId(orderNumber, uid)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        } else {
+            // Guest access: permit lookup by secret orderNumber
+            o = orderRepo.findByOrderNumber(orderNumber)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+            if (!o.isGuestOrder()) {
+                // If order belongs to a registered user, do not expose it to anonymous
+                // (Unless we decide that orderNumber is secret enough. For now, let's be strict
+                // or loose.
+                // Given the UUID nature, it's fairly safe, but let's restricting non-guests is
+                // safer).
+                return ServiceResult.error(HttpStatus.FORBIDDEN, "No autorizado");
+            }
+        }
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
 
-    // ====== Crear SIN body, solo logged-in ======
+    // ====== Crear orden - soporta users autenticados y guests con sessionId ======
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> createOrder() {
+    public ServiceResult<OrderResponse> createOrder(CreateOrderRequest req) {
         Long uid = currentUserId();
-        User user = userRepo.findById(uid)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
+        User user = null;
+        Cart cart = null;
 
-        // Carrito del user
-        Cart cart = cartRepo.findByUserId(user.getId()).orElse(null);
+        if (uid != null) {
+            // Usuario autenticado
+            user = userRepo.findById(uid)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
+            cart = cartRepo.findByUserId(user.getId()).orElse(null);
+        } else {
+            // Guest checkout - usar sessionId del request
+            if (req == null || req.getSessionId() == null || req.getSessionId().isBlank()) {
+                return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                        "Para invitados, se requiere el sessionId del carrito.");
+            }
+            cart = cartRepo.findBySessionId(req.getSessionId()).orElse(null);
+        }
+
+        // Carrito
         if (cart == null || cart.getItems() == null || cart.getItems().isEmpty()) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Tu carrito está vacío.");
         }
@@ -93,9 +130,17 @@ public class OrderServiceImpl implements OrderService {
         order.setBillingInfo(null);
 
         // Ítems + reserva de stock + subTotal
+        // Consolidación de ítems para evitar duplicados de variante
+        // Map<Long, OrderItem> consolidated = new HashMap<>();
+        // PERO necesitamos iterar para reservar stock.
+        // Mejor estrategia: iterar, validar stock y acumular en mapa.
+
+        java.util.Map<Long, OrderItem> itemsMap = new java.util.HashMap<>();
         BigDecimal subTotal = BigDecimal.ZERO;
+
         for (CartItem ci : cart.getItems()) {
-            if (ci.getQuantity() == null || ci.getQuantity() <= 0) continue;
+            if (ci.getQuantity() == null || ci.getQuantity() <= 0)
+                continue;
 
             ProductVariant v = ci.getVariant();
             if (v == null) {
@@ -104,40 +149,56 @@ public class OrderServiceImpl implements OrderService {
 
             int qty = ci.getQuantity();
 
-            // ⬇️ Para FÍSICOS y DIGITALES INSTANT: validar y reservar stock
+            // ⬇️ Validación y reserva de stock
             if (!isDigitalOnDemand(v)) {
                 int stock = (v.getStock() == null ? 0 : v.getStock());
                 if (qty > stock) {
                     return ServiceResult.error(HttpStatus.CONFLICT, "Stock insuficiente para SKU " + v.getSku());
                 }
+                // Descontar stock (acumulativo si hay duplicados? No, hay que tener cuidado)
+                // Si hay duplicados, el discount se hace dos veces.
+                // Mejor consolidar PRIMERO, luego validar/descontar.
             }
 
-            BigDecimal unitPrice = v.getPrice();
-            BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(qty));
+            // Consolidar en memoria antes de crear OrderItems
+            OrderItem oi = itemsMap.get(v.getId());
+            if (oi == null) {
+                oi = new OrderItem();
+                oi.setOrder(order);
+                oi.setVariant(v);
+                oi.setProductName(v.getProduct().getName());
+                oi.setSku(v.getSku());
+                oi.setAttributesJson(v.getAttributesJson());
+                oi.setUnitPrice(v.getPrice());
+                oi.setQuantity(0);
+                oi.setDiscountAmount(BigDecimal.ZERO);
+                oi.setLineTotal(BigDecimal.ZERO);
+                itemsMap.put(v.getId(), oi);
+            }
 
-            OrderItem oi = new OrderItem();
-            oi.setOrder(order);
-            oi.setVariant(v);
-            oi.setProductName(v.getProduct().getName());
-            oi.setSku(v.getSku());
-            oi.setAttributesJson(v.getAttributesJson());
-            oi.setUnitPrice(unitPrice);
-            oi.setQuantity(qty);
-            oi.setDiscountAmount(BigDecimal.ZERO);
-            oi.setLineTotal(lineTotal);
+            // Sumar cantidad y total
+            oi.setQuantity(oi.getQuantity() + qty);
+            BigDecimal lineTotal = v.getPrice().multiply(BigDecimal.valueOf(qty));
+            oi.setLineTotal(oi.getLineTotal().add(lineTotal));
 
-            // ⬇️ Reservar stock solo si NO es on-demand
+            subTotal = subTotal.add(lineTotal);
+        }
+
+        // Ahora agregar a la orden y validar stock final
+        for (OrderItem oi : itemsMap.values()) {
+            ProductVariant v = oi.getVariant();
+            int qty = oi.getQuantity();
+
             if (!isDigitalOnDemand(v)) {
                 int stock = (v.getStock() == null ? 0 : v.getStock());
+                if (qty > stock) {
+                    // Restaurar lo que hubiéramos descontado? Aún no guardamos nada.
+                    return ServiceResult.error(HttpStatus.CONFLICT,
+                            "Stock insuficiente para SKU " + v.getSku() + " (Total: " + qty + ")");
+                }
                 v.setStock(stock - qty);
-            } else {
-                // Si tenés campos en OrderItem para digitales, podés inicializarlos acá:
-                // oi.setDigitalDelivered(false);
-                // oi.setLicenseKey(null);
             }
-
             order.getItems().add(oi);
-            subTotal = subTotal.add(lineTotal);
         }
 
         // Montos iniciales (envío y tax en 0 hasta que haya datos)
@@ -151,6 +212,11 @@ public class OrderServiceImpl implements OrderService {
         order.setExpiresAt(LocalDateTime.now().plusMinutes(30));
 
         Order saved = orderRepo.save(order);
+
+        // ✅ VACIAR CARRITO tras compra exitosa
+        // (Usamos cartService para asegurar lógica centralizada)
+        cartService.clear(uid, req.getSessionId());
+
         return ServiceResult.created(orderMapper.toResponse(saved));
     }
 
@@ -169,14 +235,12 @@ public class OrderServiceImpl implements OrderService {
         Long uid = currentUserId();
 
         // 👇 ahora trae solo órdenes cuyo status != PENDING
-        Page<OrderSummaryProjection> page =
-                orderRepo.findSummariesByUserIdExcludingStatus(uid, OrderStatus.PENDING, pageable);
+        Page<OrderSummaryProjection> page = orderRepo.findSummariesByUserIdExcludingStatus(uid, OrderStatus.PENDING,
+                pageable);
 
         Page<OrderSummaryResponse> mapped = page.map(orderMapper::toSummary);
         return ServiceResult.ok(PageResponse.of(mapped));
     }
-
-
 
     @Override
     @Transactional(readOnly = true)
@@ -190,14 +254,23 @@ public class OrderServiceImpl implements OrderService {
         return ServiceResult.ok(list);
     }
 
-
     // ====== PATCH Shipping ======
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> patchShippingAddress(Long orderId, UpdateShippingAddressRequest req) {
+    public ServiceResult<OrderResponse> patchShippingAddress(String orderNumber, UpdateShippingAddressRequest req) {
         Long uid = currentUserId();
-        Order o = orderRepo.findByIdAndUserId(orderId, uid)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        Order o;
+
+        if (uid != null) {
+            o = orderRepo.findByOrderNumberAndUserId(orderNumber, uid)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        } else {
+            o = orderRepo.findByOrderNumber(orderNumber)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+            if (!o.isGuestOrder()) {
+                return ServiceResult.error(HttpStatus.FORBIDDEN, "No autorizado");
+            }
+        }
 
         if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST,
@@ -205,16 +278,24 @@ public class OrderServiceImpl implements OrderService {
         }
 
         if (o.getStatus() != OrderStatus.PENDING) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede modificar shipping mientras la orden está PENDING.");
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "Solo puede modificar shipping mientras la orden está PENDING.");
         }
 
-        Address shipAddr = addressRepo.findById(req.getShippingAddressId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Dirección de envío no encontrada"));
-
-        var snapshot = SnapshotMapper.toSnapshot(shipAddr);
-        // completar opcionales si los mandan
-        if (req.getRecipientName() != null) snapshot.setRecipientName(req.getRecipientName());
-        if (req.getPhone() != null) snapshot.setPhone(req.getPhone());
+        AddressSnapshot snapshot;
+        if (isAuthenticated() && req.getShippingAddressId() != null) {
+            // Usuario autenticado: obtener de BD
+            Address shipAddr = addressRepo.findById(req.getShippingAddressId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Dirección de envío no encontrada"));
+            snapshot = SnapshotMapper.toSnapshot(shipAddr);
+            if (req.getRecipientName() != null)
+                snapshot.setRecipientName(req.getRecipientName());
+            if (req.getPhone() != null)
+                snapshot.setPhone(req.getPhone());
+        } else {
+            // Guest: crear snapshot desde request
+            snapshot = SnapshotMapper.fromRequest(req);
+        }
 
         o.setShippingAddress(snapshot);
 
@@ -227,10 +308,20 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> confirmOrder(Long orderId, ConfirmOrderRequest req) {
+    public ServiceResult<OrderResponse> confirmOrder(String orderNumber, ConfirmOrderRequest req) {
         Long uid = currentUserId();
-        Order o = orderRepo.findByIdAndUserId(orderId, uid)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        Order o;
+        if (uid != null) {
+            o = orderRepo.findByOrderNumberAndUserId(orderNumber, uid)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        } else {
+            o = orderRepo.findByOrderNumber(orderNumber)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+            // Permitir confirmar si es guest
+            if (!o.isGuestOrder()) {
+                return ServiceResult.error(HttpStatus.FORBIDDEN, "No autorizado");
+            }
+        }
 
         if (o.getStatus() != OrderStatus.PENDING) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo se puede confirmar una orden en estado PENDING.");
@@ -244,8 +335,19 @@ public class OrderServiceImpl implements OrderService {
         if (requiresShipping(o) && o.getShippingAddress() == null) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta la dirección de envío.");
         }
+
+        // Validación flexible de billing según tipo de orden
         if (o.getBillingInfo() == null) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta la información de facturación.");
+        }
+
+        // Para guests con solo productos digitales: validar solo datos mínimos
+        if (o.isGuestOrder() && !requiresShipping(o)) {
+            var billing = o.getBillingInfo();
+            if (billing.getFullName() == null || billing.getEmailForInvoices() == null) {
+                return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                        "Para productos digitales se requiere nombre completo y email.");
+            }
         }
         if (o.getChosenPaymentMethod() == null) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST, "Falta el método de pago.");
@@ -257,15 +359,24 @@ public class OrderServiceImpl implements OrderService {
         return paymentService.initPaymentForOrder(o, o.getChosenPaymentMethod());
     }
 
-
     // ====== PATCH Billing ======
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> patchBillingProfile(Long orderId, UpdateBillingProfileRequest req) {
+    public ServiceResult<OrderResponse> patchBillingProfile(String orderNumber, UpdateBillingProfileRequest req) {
 
         Long uid = currentUserId();
-        Order o = orderRepo.findByIdAndUserId(orderId, uid)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        Order o;
+
+        if (uid != null) {
+            o = orderRepo.findByOrderNumberAndUserId(orderNumber, uid)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        } else {
+            o = orderRepo.findByOrderNumber(orderNumber)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+            if (!o.isGuestOrder()) {
+                return ServiceResult.error(HttpStatus.FORBIDDEN, "No autorizado");
+            }
+        }
 
         if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST,
@@ -273,18 +384,32 @@ public class OrderServiceImpl implements OrderService {
         }
 
         if (o.getStatus() != OrderStatus.PENDING) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede modificar facturación mientras la orden está PENDING.");
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "Solo puede modificar facturación mientras la orden está PENDING.");
         }
 
-        BillingProfile bp = billingRepo.findById(req.getBillingProfileId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Perfil de facturación no encontrado"));
-
-        Address billingAddr = bp.getBillingAddress();
-        if (billingAddr == null) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "El perfil de facturación no tiene dirección asociada");
+        BillingSnapshot billingSnapshot;
+        if (isAuthenticated() && req.getBillingProfileId() != null) {
+            // Usuario autenticado: obtener de BD
+            BillingProfile bp = billingRepo.findById(req.getBillingProfileId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Perfil de facturación no encontrado"));
+            Address billingAddr = bp.getBillingAddress();
+            if (billingAddr == null) {
+                return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                        "El perfil de facturación no tiene dirección asociada");
+            }
+            billingSnapshot = SnapshotMapper.toSnapshot(bp, billingAddr);
+        } else {
+            // Guest: crear snapshot desde request
+            billingSnapshot = SnapshotMapper.fromRequest(req);
         }
 
-        o.setBillingInfo(SnapshotMapper.toSnapshot(bp, billingAddr));
+        o.setBillingInfo(billingSnapshot);
+
+        // Capturar email del guest si no está seteado
+        if (o.isGuestOrder() && o.getGuestEmail() == null && billingSnapshot != null) {
+            o.setGuestEmail(billingSnapshot.getEmailForInvoices());
+        }
 
         // Si tu cálculo de impuestos depende de billing, recalcular:
         recalcTotals(o);
@@ -296,10 +421,20 @@ public class OrderServiceImpl implements OrderService {
     // ====== PATCH Payment ======
     @Override
     @Transactional
-    public ServiceResult<OrderResponse> patchPaymentMethod(Long orderId, UpdatePaymentMethodRequest req) {
+    public ServiceResult<OrderResponse> patchPaymentMethod(String orderNumber, UpdatePaymentMethodRequest req) {
         Long uid = currentUserId();
-        Order o = orderRepo.findByIdAndUserId(orderId, uid)
-                .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        Order o;
+
+        if (uid != null) {
+            o = orderRepo.findByOrderNumberAndUserId(orderNumber, uid)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+        } else {
+            o = orderRepo.findByOrderNumber(orderNumber)
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
+            if (!o.isGuestOrder()) {
+                return ServiceResult.error(HttpStatus.FORBIDDEN, "No autorizado");
+            }
+        }
 
         if (o.getPayment() != null && o.getPayment().getStatus() != PaymentStatus.CANCELED) {
             return ServiceResult.error(HttpStatus.BAD_REQUEST,
@@ -307,7 +442,8 @@ public class OrderServiceImpl implements OrderService {
         }
 
         if (o.getStatus() != OrderStatus.PENDING) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Solo puede cambiar el método de pago mientras la orden está PENDING.");
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "Solo puede cambiar el método de pago mientras la orden está PENDING.");
         }
 
         PaymentMethod method = req.getPaymentMethod();
@@ -335,18 +471,19 @@ public class OrderServiceImpl implements OrderService {
                 : BigDecimal.ZERO;
 
         BigDecimal taxAmount = calcularImpuestos(subTotal, o.getBillingInfo());
-        
+
         // Descuento por método de pago (Transferencia = 10% off)
         BigDecimal discountTotal = BigDecimal.ZERO;
         if (o.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
             discountTotal = subTotal.multiply(new BigDecimal("0.05"));
         }
-        
+
         // Si hubiera otros descuentos (cupones), se sumarían aquí
         // discountTotal = discountTotal.add(couponDiscount);
 
         BigDecimal total = subTotal.subtract(discountTotal).add(shippingCost).add(taxAmount);
-        if (total.compareTo(BigDecimal.ZERO) < 0) total = BigDecimal.ZERO;
+        if (total.compareTo(BigDecimal.ZERO) < 0)
+            total = BigDecimal.ZERO;
 
         o.setSubTotal(subTotal);
         o.setShippingCost(shippingCost);
@@ -395,22 +532,22 @@ public class OrderServiceImpl implements OrderService {
 
         // Validar que solo se puedan actualizar a SHIPPED o DELIVERED
         if (newStatus != OrderStatus.SHIPPED && newStatus != OrderStatus.DELIVERED) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
                     "Solo se puede actualizar el estado a SHIPPED o DELIVERED.");
         }
 
         // Validar transiciones de estado
         OrderStatus currentStatus = o.getStatus();
-        
+
         if (newStatus == OrderStatus.SHIPPED) {
             // Para marcar como SHIPPED, debe estar en PAID
             if (currentStatus != OrderStatus.PAID) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                return ServiceResult.error(HttpStatus.BAD_REQUEST,
                         "Solo se puede marcar como SHIPPED una orden que esté PAID.");
             }
             // No permitir SHIPPED si la orden es 100% digital
             if (!requiresShipping(o)) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                return ServiceResult.error(HttpStatus.BAD_REQUEST,
                         "No se puede marcar como SHIPPED una orden completamente digital.");
             }
         } else if (newStatus == OrderStatus.DELIVERED) {
@@ -418,17 +555,17 @@ public class OrderServiceImpl implements OrderService {
             // - Si requiere envío físico: debe estar en SHIPPED
             // - Si es 100% digital: puede pasar directo de PAID
             boolean isDigitalOnly = !requiresShipping(o);
-            
+
             if (isDigitalOnly) {
                 // Para órdenes digitales: PAID -> DELIVERED
                 if (currentStatus != OrderStatus.PAID && currentStatus != OrderStatus.SHIPPED) {
-                    return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                    return ServiceResult.error(HttpStatus.BAD_REQUEST,
                             "Solo se puede marcar como DELIVERED una orden digital que esté PAID o SHIPPED.");
                 }
             } else {
                 // Para órdenes físicas: debe estar SHIPPED
                 if (currentStatus != OrderStatus.SHIPPED) {
-                    return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                    return ServiceResult.error(HttpStatus.BAD_REQUEST,
                             "Solo se puede marcar como DELIVERED una orden física que esté SHIPPED.");
                 }
             }
@@ -447,10 +584,16 @@ public class OrderServiceImpl implements OrderService {
         }
 
         return switch (method) {
-            case BANK_TRANSFER, CASH ->
-                    LocalDateTime.now().plusHours(48);   // transferencia / efectivo
-            default ->
-                    LocalDateTime.now().plusMinutes(30); // MP, Card, etc.
+            case CARD ->
+                LocalDateTime.now().plusHours(1); // pago inmediato
+            case MERCADO_PAGO ->
+                LocalDateTime.now().plusMinutes(30); // preferencia MP rápida
+            case PAYPAL ->
+                LocalDateTime.now().plusMinutes(45); // un poco más de margen
+            case CASH ->
+                LocalDateTime.now().plusHours(24); // efectivo
+            case BANK_TRANSFER ->
+                LocalDateTime.now().plusHours(48); // transferencia
         };
     }
 
@@ -460,40 +603,39 @@ public class OrderServiceImpl implements OrderService {
     public ServiceResult<PageResponse<OrderBackofficeResponse>> listAllOrdersForBackoffice(
             Pageable pageable, String search, com.empresa.ecommerce_backend.enums.OrderStatus orderStatus,
             com.empresa.ecommerce_backend.enums.PaymentStatus paymentStatus) {
-        
+
         // Construir especificaciones dinámicamente
-        org.springframework.data.jpa.domain.Specification<Order> spec = 
-                org.springframework.data.jpa.domain.Specification.where(null);
-        
+        org.springframework.data.jpa.domain.Specification<Order> spec = org.springframework.data.jpa.domain.Specification
+                .where(null);
+
         // Filtro por búsqueda (order number o email usuario)
         if (search != null && !search.isBlank()) {
             String searchLower = search.toLowerCase().trim();
             spec = spec.and((root, query, cb) -> {
                 jakarta.persistence.criteria.Join<Order, User> userJoin = root.join("user");
                 return cb.or(
-                    cb.like(cb.lower(root.get("orderNumber")), "%" + searchLower + "%"),
-                    cb.like(cb.lower(userJoin.get("email")), "%" + searchLower + "%")
-                );
+                        cb.like(cb.lower(root.get("orderNumber")), "%" + searchLower + "%"),
+                        cb.like(cb.lower(userJoin.get("email")), "%" + searchLower + "%"));
             });
         }
-        
+
         // Filtro por estado de orden
         if (orderStatus != null) {
-            spec = spec.and((root, query, cb) -> 
-                cb.equal(root.get("status"), orderStatus));
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), orderStatus));
         }
-        
+
         // Filtro por estado de pago
         if (paymentStatus != null) {
             spec = spec.and((root, query, cb) -> {
-                jakarta.persistence.criteria.Join<Order, Payment> paymentJoin = root.join("payment", jakarta.persistence.criteria.JoinType.LEFT);
+                jakarta.persistence.criteria.Join<Order, Payment> paymentJoin = root.join("payment",
+                        jakarta.persistence.criteria.JoinType.LEFT);
                 return cb.equal(paymentJoin.get("status"), paymentStatus);
             });
         }
-        
+
         // Ejecutar query
         org.springframework.data.domain.Page<Order> page = orderRepo.findAll(spec, pageable);
-        
+
         // Mapear a DTO
         org.springframework.data.domain.Page<OrderBackofficeResponse> mapped = page.map(o -> {
             OrderBackofficeResponse dto = new OrderBackofficeResponse();
@@ -503,16 +645,16 @@ public class OrderServiceImpl implements OrderService {
             dto.setOrderDate(o.getOrderDate());
             dto.setTotalAmount(o.getTotalAmount());
             dto.setOrderStatus(o.getStatus());
-            
+
             // Extraer payment info
             if (o.getPayment() != null) {
                 dto.setPaymentStatus(o.getPayment().getStatus());
                 dto.setPaymentMethod(o.getPayment().getMethod() != null ? o.getPayment().getMethod().name() : null);
             }
-            
+
             return dto;
         });
-        
+
         return ServiceResult.ok(PageResponse.of(mapped));
     }
 
@@ -535,22 +677,22 @@ public class OrderServiceImpl implements OrderService {
 
         // Validar que solo se puedan actualizar a SHIPPED o DELIVERED
         if (newStatus != OrderStatus.SHIPPED && newStatus != OrderStatus.DELIVERED) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
                     "Solo se puede actualizar el estado a SHIPPED o DELIVERED.");
         }
 
         // Validar transiciones de estado
         OrderStatus currentStatus = o.getStatus();
-        
+
         if (newStatus == OrderStatus.SHIPPED) {
             // Para marcar como SHIPPED, debe estar en PAID
             if (currentStatus != OrderStatus.PAID) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                return ServiceResult.error(HttpStatus.BAD_REQUEST,
                         "Solo se puede marcar como SHIPPED una orden que esté PAID.");
             }
             // No permitir SHIPPED si la orden es 100% digital
             if (!requiresShipping(o)) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                return ServiceResult.error(HttpStatus.BAD_REQUEST,
                         "No se puede marcar como SHIPPED una orden completamente digital.");
             }
         } else if (newStatus == OrderStatus.DELIVERED) {
@@ -558,17 +700,17 @@ public class OrderServiceImpl implements OrderService {
             // - Si requiere envío físico: debe estar en SHIPPED
             // - Si es 100% digital: puede pasar directo de PAID
             boolean isDigitalOnly = !requiresShipping(o);
-            
+
             if (isDigitalOnly) {
                 // Para órdenes digitales: PAID -> DELIVERED
                 if (currentStatus != OrderStatus.PAID && currentStatus != OrderStatus.SHIPPED) {
-                    return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                    return ServiceResult.error(HttpStatus.BAD_REQUEST,
                             "Solo se puede marcar como DELIVERED una orden digital que esté PAID o SHIPPED.");
                 }
             } else {
                 // Para órdenes físicas: debe estar SHIPPED
                 if (currentStatus != OrderStatus.SHIPPED) {
-                    return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                    return ServiceResult.error(HttpStatus.BAD_REQUEST,
                             "Solo se puede marcar como DELIVERED una orden física que esté SHIPPED.");
                 }
             }
@@ -577,5 +719,58 @@ public class OrderServiceImpl implements OrderService {
         o.setStatus(newStatus);
         Order saved = orderRepo.save(o);
         return ServiceResult.ok(orderMapper.toResponse(saved));
+    }
+
+    // ====== Guest checkout: consultar orden ======
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<OrderResponse> getGuestOrder(String email, String orderNumber) {
+        if (email == null || email.isBlank()) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Email requerido");
+        }
+        if (orderNumber == null || orderNumber.isBlank()) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Número de orden requerido");
+        }
+
+        Order o = orderRepo.findByOrderNumberAndGuestEmail(orderNumber, email)
+                .orElse(null);
+
+        if (o == null) {
+            return ServiceResult.error(HttpStatus.NOT_FOUND,
+                    "No se encontró una orden con ese número y email.");
+        }
+
+        return ServiceResult.ok(orderMapper.toResponse(o));
+    }
+
+    @Override
+    @Transactional
+    public void linkGuestOrdersToUser(String email, Long userId) {
+        if (email == null || email.isBlank() || userId == null) {
+            return;
+        }
+
+        User user = userRepo.findById(userId).orElse(null);
+        if (user == null) {
+            return;
+        }
+
+        // Buscar solo las órdenes guest HUÉRFANAS con ese email (optimizado)
+        List<Order> guestOrders = orderRepo.findByGuestEmailAndUserIsNull(email);
+
+        if (guestOrders.isEmpty()) {
+            return;
+        }
+
+        // Vincular cada orden al usuario
+        for (Order order : guestOrders) {
+            // Validación extra (aunque la query ya lo filtra)
+            if (order.getUser() == null && email.equalsIgnoreCase(order.getGuestEmail())) {
+                order.setUser(user);
+                order.setUpdatedAt(LocalDateTime.now());
+            }
+        }
+
+        orderRepo.saveAll(guestOrders);
     }
 }

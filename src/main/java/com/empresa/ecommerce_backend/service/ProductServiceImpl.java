@@ -3,6 +3,7 @@ package com.empresa.ecommerce_backend.service;
 import com.empresa.ecommerce_backend.dto.request.ProductPaginatedRequest;
 import com.empresa.ecommerce_backend.dto.request.ProductRequest;
 import com.empresa.ecommerce_backend.dto.response.*;
+import com.empresa.ecommerce_backend.dto.response.DigitalProductDTO;
 import com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException;
 import com.empresa.ecommerce_backend.mapper.ProductMapper;
 import com.empresa.ecommerce_backend.mapper.ProductPageMapper;
@@ -107,15 +108,18 @@ public class ProductServiceImpl implements ProductService {
                     params.getBrandId(),
                     q,
                     Boolean.TRUE.equals(params.getInStockOnly()),
-                    pageable
-            );
+                    pageable);
         } else {
             // camino actual con Specifications
             List<Specification<Product>> parts = new ArrayList<>();
-            if (Boolean.TRUE.equals(params.getInStockOnly())) parts.add(ProductSpecs.inStockOnly(true));
-            if (params.getCategoryId() != null) parts.add(ProductSpecs.hasCategory(params.getCategoryId()));
-            if (params.getBrandId() != null) parts.add(ProductSpecs.hasBrand(params.getBrandId()));
-            if (q != null) parts.add(ProductSpecs.nameContains(params.getQ()));
+            if (Boolean.TRUE.equals(params.getInStockOnly()))
+                parts.add(ProductSpecs.inStockOnly(true));
+            if (params.getCategoryId() != null)
+                parts.add(ProductSpecs.hasCategory(params.getCategoryId()));
+            if (params.getBrandId() != null)
+                parts.add(ProductSpecs.hasBrand(params.getBrandId()));
+            if (q != null)
+                parts.add(ProductSpecs.nameContains(params.getQ()));
             if (params.getMinPrice() != null || params.getMaxPrice() != null)
                 parts.add(ProductSpecs.priceBetween(params.getMinPrice(), params.getMaxPrice()));
             if (params.getColors() != null && !params.getColors().isEmpty())
@@ -138,7 +142,6 @@ public class ProductServiceImpl implements ProductService {
         return ServiceResult.ok(response);
     }
 
-
     @Override
     public ServiceResult<ProductFacetsResponse> getProductFacets(ProductPaginatedRequest params) {
 
@@ -152,28 +155,27 @@ public class ProductServiceImpl implements ProductService {
         final BigDecimal maxPrice = params.getMaxPrice();
 
         var categoryFacets = categoryRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
-        var brandFacets    = brandRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
-        var pr             = productRepository.findPriceRange(namePattern, inStockOnly, minPrice, maxPrice);
+        var brandFacets = brandRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
+        var pr = productRepository.findPriceRange(namePattern, inStockOnly, minPrice, maxPrice);
 
         var dto = new ProductFacetsResponse();
         dto.setCategoryFacets(categoryFacets);
         dto.setBrandFacets(brandFacets);
         dto.setPriceRange(new PriceRangeResponse(
                 (pr != null) ? pr.getMinPrice() : null,
-                (pr != null) ? pr.getMaxPrice() : null
-        ));
+                (pr != null) ? pr.getMaxPrice() : null));
 
         return ServiceResult.ok(dto);
     }
 
-
     private Sort resolveSort(String sortKey) {
-        if (sortKey == null) sortKey = "latest";
+        if (sortKey == null)
+            sortKey = "latest";
         return switch (sortKey) {
-            case "latest"      -> Sort.by(Sort.Direction.DESC, "id");
+            case "latest" -> Sort.by(Sort.Direction.DESC, "id");
             case "bestSelling" -> Sort.by(Sort.Direction.DESC, "soldCount").and(Sort.by(Sort.Direction.DESC, "id"));
-            case "id"          -> Sort.by(Sort.Direction.ASC, "id");
-            default            -> Sort.by(Sort.Direction.DESC, "id");
+            case "id" -> Sort.by(Sort.Direction.ASC, "id");
+            default -> Sort.by(Sort.Direction.DESC, "id");
         };
     }
 
@@ -183,16 +185,17 @@ public class ProductServiceImpl implements ProductService {
     private void enrichWithReviewStats(ProductResponse response, Long productId) {
         Double avgRating = reviewRepository.averageRatingByProduct(productId);
         Long totalReviews = reviewRepository.countByProduct_Id(productId);
-        
+
         response.setAverageRating(avgRating);
         response.setTotalReviews(totalReviews);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public ServiceResult<PageResponse<ProductBackofficeResponse>> listForBackoffice(Pageable pageable, String searchQuery) {
+    public ServiceResult<PageResponse<ProductBackofficeResponse>> listForBackoffice(Pageable pageable,
+            String searchQuery) {
         Page<Product> page;
-        
+
         if (searchQuery != null && !searchQuery.isBlank()) {
             String queryPattern = "%" + searchQuery.toLowerCase().trim() + "%";
             Specification<Product> spec = ProductSpecs.nameContains(searchQuery);
@@ -200,12 +203,12 @@ public class ProductServiceImpl implements ProductService {
         } else {
             page = productRepository.findAll(pageable);
         }
-        
+
         Page<ProductBackofficeResponse> mapped = page.map(p -> {
             ProductBackofficeResponse dto = new ProductBackofficeResponse();
             dto.setId(p.getId());
             dto.setName(p.getName());
-            
+
             // Thumbnail: primera imagen del producto o de la primera variante
             String thumbnail = null;
             if (p.getImages() != null && !p.getImages().isEmpty()) {
@@ -233,11 +236,11 @@ public class ProductServiceImpl implements ProductService {
                         .orElse(null);
             }
             dto.setThumbnail(thumbnail);
-            
+
             // Category y Brand (nombres, no IDs)
             dto.setCategoryName(p.getCategory() != null ? p.getCategory().getName() : null);
             dto.setBrandName(p.getBrand() != null ? p.getBrand().getName() : null);
-            
+
             // Precio representativo (más barato)
             BigDecimal price = null;
             if (p.getVariants() != null && !p.getVariants().isEmpty()) {
@@ -248,15 +251,16 @@ public class ProductServiceImpl implements ProductService {
                         .orElse(null);
             }
             dto.setPrice(price);
-            
+
             // Stock total: considerar tipo de fulfillment
             // Si tiene variantes digitales on-demand: stock ilimitado (-1)
             // Si tiene variantes físicas o digitales instant: sumar stock real
             Integer totalStock = null;
             if (p.getVariants() != null && !p.getVariants().isEmpty()) {
                 boolean hasOnlyDigitalOnDemand = p.getVariants().stream()
-                        .allMatch(v -> v.getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND);
-                
+                        .allMatch(v -> v
+                                .getFulfillmentType() == com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND);
+
                 if (hasOnlyDigitalOnDemand) {
                     // Productos 100% digitales on-demand: always available
                     totalStock = -1; // -1 indica stock ilimitado
@@ -269,13 +273,13 @@ public class ProductServiceImpl implements ProductService {
                 }
             }
             dto.setTotalStock(totalStock);
-            
+
             // Cantidad de variantes
             dto.setVariantCount(p.getVariants() != null ? p.getVariants().size() : 0);
-            
+
             return dto;
         });
-        
+
         return ServiceResult.ok(PageResponse.of(mapped));
     }
 
@@ -289,7 +293,7 @@ public class ProductServiceImpl implements ProductService {
         product.setName(request.getName());
         product.setDescription(request.getDescription());
         product.setSku(request.getSku());
-        
+
         // Actualizar categoría si viene
         if (request.getCategoryId() != null) {
             Category category = categoryRepository.findById(request.getCategoryId())
@@ -298,7 +302,7 @@ public class ProductServiceImpl implements ProductService {
         } else {
             product.setCategory(null);
         }
-        
+
         // Actualizar marca si viene
         if (request.getBrandId() != null) {
             Brand brand = brandRepository.findById(request.getBrandId())
@@ -307,7 +311,6 @@ public class ProductServiceImpl implements ProductService {
         } else {
             product.setBrand(null);
         }
-
 
         Product saved = productRepository.save(product);
         return ServiceResult.ok(productMapper.toResponse(saved));
@@ -327,19 +330,57 @@ public class ProductServiceImpl implements ProductService {
         response.setBrandId(product.getBrand() != null ? product.getBrand().getId() : null);
         response.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
         response.setSoldCount(product.getSoldCount());
-        
+
         // Mapear imágenes del producto base (sin variante)
         List<ProductImageResponse> imageResponses = product.getImages().stream()
-                .filter(img -> img.getVariant() == null)  // Solo imágenes del producto base
+                .filter(img -> img.getVariant() == null) // Solo imágenes del producto base
                 .map(img -> new ProductImageResponse(
                         img.getId(),
                         img.getUrl(),
                         img.getPosition(),
-                        null  // variantId siempre null para producto base
+                        null // variantId siempre null para producto base
                 ))
                 .toList();
         response.setImages(imageResponses);
 
         return ServiceResult.ok(response);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceResult<List<DigitalProductDTO>> getDigitalProducts() {
+        var products = productRepository.findDigitalProducts();
+        var dtos = products.stream().map(p -> {
+            // Slugify name
+            String slug = p.getName().toLowerCase()
+                    .replace(" ", "-")
+                    .replaceAll("[^a-z0-9-]", "");
+
+            // Image logic: product image > variant image
+            String imageUrl = null;
+            if (p.getImages() != null && !p.getImages().isEmpty()) {
+                imageUrl = p.getImages().stream()
+                        .sorted(java.util.Comparator
+                                .comparing(com.empresa.ecommerce_backend.model.ProductImage::getPosition))
+                        .findFirst()
+                        .map(com.empresa.ecommerce_backend.model.ProductImage::getUrl)
+                        .orElse(null);
+            }
+
+            if (imageUrl == null && p.getVariants() != null) {
+                imageUrl = p.getVariants().stream()
+                        .filter(v -> v.getImages() != null && !v.getImages().isEmpty())
+                        .flatMap(v -> v.getImages().stream())
+                        .sorted(java.util.Comparator
+                                .comparing(com.empresa.ecommerce_backend.model.ProductImage::getPosition))
+                        .findFirst()
+                        .map(com.empresa.ecommerce_backend.model.ProductImage::getUrl)
+                        .orElse(null);
+            }
+
+            return new DigitalProductDTO(p.getId(), p.getName(), slug, imageUrl);
+        }).toList();
+
+        return ServiceResult.ok(dtos);
     }
 }

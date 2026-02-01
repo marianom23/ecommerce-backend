@@ -19,8 +19,8 @@ public class OrderController {
     private final OrderService orderService;
 
     @PostMapping
-    public ServiceResult<OrderResponse> create() {
-        return orderService.createOrder();
+    public ServiceResult<OrderResponse> create(@RequestBody(required = false) CreateOrderRequest req) {
+        return orderService.createOrder(req);
     }
 
     @GetMapping("/{id}")
@@ -44,8 +44,7 @@ public class OrderController {
     public ServiceResult<PageResponse<OrderSummaryResponse>> listSummaries(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "orderDate,desc") String sort
-    ) {
+            @RequestParam(defaultValue = "orderDate,desc") String sort) {
         // parseo simple "campo,direccion"
         Sort sortObj;
         if (sort.contains(",")) {
@@ -60,33 +59,41 @@ public class OrderController {
         return orderService.listMineSummaries(pageable);
     }
 
-    @PatchMapping("/{id}/shipping-address")
-    public ServiceResult<OrderResponse> patchShipping(@PathVariable Long id,
-                                                      @Valid @RequestBody UpdateShippingAddressRequest req) {
-        return orderService.patchShippingAddress(id, req);
+    @PatchMapping("/{orderNumber}/shipping-address")
+    public ServiceResult<OrderResponse> patchShipping(@PathVariable String orderNumber,
+            @Valid @RequestBody UpdateShippingAddressRequest req) {
+        return orderService.patchShippingAddress(orderNumber, req);
     }
 
-    @PatchMapping("/{id}/billing-profile")
-    public ServiceResult<OrderResponse> patchBilling(@PathVariable Long id,
-                                                     @Valid @RequestBody UpdateBillingProfileRequest req) {
-        return orderService.patchBillingProfile(id, req);
+    @PatchMapping("/{orderNumber}/billing-profile")
+    public ServiceResult<OrderResponse> patchBilling(@PathVariable String orderNumber,
+            @Valid @RequestBody UpdateBillingProfileRequest req) {
+        return orderService.patchBillingProfile(orderNumber, req);
     }
 
-    @PatchMapping("/{id}/payment-method")
-    public ServiceResult<OrderResponse> patchPaymentMethod(@PathVariable Long id,
-                                                           @Valid @RequestBody UpdatePaymentMethodRequest req) {
-        return orderService.patchPaymentMethod(id, req);
+    @PatchMapping("/{orderNumber}/payment-method")
+    public ServiceResult<OrderResponse> patchPaymentMethod(@PathVariable String orderNumber,
+            @Valid @RequestBody UpdatePaymentMethodRequest req) {
+        return orderService.patchPaymentMethod(orderNumber, req);
     }
 
-    @PostMapping("/{id}/confirm")
-    public ServiceResult<OrderResponse> confirm(@PathVariable Long id,
-                                                @RequestBody(required = false) ConfirmOrderRequest req) {
-        return orderService.confirmOrder(id, req);
+    @PostMapping("/{orderNumber}/confirm")
+    public ServiceResult<OrderResponse> confirm(@PathVariable String orderNumber,
+            @RequestBody(required = false) ConfirmOrderRequest req) {
+        return orderService.confirmOrder(orderNumber, req);
     }
 
     @PatchMapping("/{id}/status")
     public ServiceResult<OrderResponse> updateStatus(@PathVariable Long id,
-                                                      @Valid @RequestBody UpdateOrderStatusRequest req) {
+            @Valid @RequestBody UpdateOrderStatusRequest req) {
         return orderService.updateOrderStatus(id, req);
+    }
+
+    /** Endpoint público para que guests consulten sus órdenes */
+    @GetMapping("/guest")
+    public ServiceResult<OrderResponse> getGuestOrder(
+            @RequestParam String email,
+            @RequestParam String orderNumber) {
+        return orderService.getGuestOrder(email, orderNumber);
     }
 }

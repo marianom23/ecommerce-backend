@@ -9,13 +9,21 @@ import java.util.List;
 
 public interface ProductService {
     ServiceResult<ProductResponse> createProduct(ProductRequest dto);
+
     ServiceResult<List<ProductResponse>> getAllProducts();
+
     ServiceResult<ProductResponse> getProductById(Long id);
+
     ServiceResult<PaginatedResponse<ProductResponse>> getAllProductsPaged(ProductPaginatedRequest params);
+
     ServiceResult<ProductFacetsResponse> getProductFacets(ProductPaginatedRequest params);
-    
+
     // Admin backoffice
     ServiceResult<PageResponse<ProductBackofficeResponse>> listForBackoffice(Pageable pageable, String searchQuery);
+
     ServiceResult<ProductResponse> updateProduct(Long id, ProductRequest request);
+
     ServiceResult<ProductAdminResponse> getProductForAdmin(Long id);
+
+    ServiceResult<List<DigitalProductDTO>> getDigitalProducts();
 }

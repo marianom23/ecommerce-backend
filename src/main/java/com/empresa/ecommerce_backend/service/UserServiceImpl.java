@@ -55,6 +55,7 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final LoginAttemptService loginAttemptService;
     private final ApplicationEventPublisher publisher;
+    private final com.empresa.ecommerce_backend.service.interfaces.OrderMigrationService orderMigrationService;
 
     /* =================== REGISTER =================== */
     @Transactional
@@ -77,6 +78,16 @@ public class UserServiceImpl implements UserService {
 
             String token = jwtService.generateEmailVerificationToken(saved.getEmail());
             publisher.publishEvent(new UserRegisteredEvent(saved.getEmail(), token));
+
+            // Migrar órdenes guest si existen
+            try {
+                int count = orderMigrationService.migrateGuestOrdersToUser(saved.getEmail(), saved.getId());
+                if (count > 0) {
+                    log.info("Migrated {} guest orders for user {}", count, saved.getEmail());
+                }
+            } catch (Exception e) {
+                log.warn("Error migrating guest orders: {}", e.getMessage());
+            }
 
             RegisterUserResponse response = userMapper.toRegisterResponse(saved);
             return ServiceResult.created(response);
@@ -125,8 +136,7 @@ public class UserServiceImpl implements UserService {
                 loginAttemptService.logAttempt(user, ip, false, "Sin contraseña (OAuth).");
                 return ServiceResult.error(
                         HttpStatus.BAD_REQUEST,
-                        "Este usuario no tiene contraseña configurada. Inicie sesión con Google o Microsoft."
-                );
+                        "Este usuario no tiene contraseña configurada. Inicie sesión con Google o Microsoft.");
             }
 
             if (!passwordEncoder.matches(request.password(), user.getPassword())) {
@@ -136,8 +146,9 @@ public class UserServiceImpl implements UserService {
 
             // Si quisieras exigir email verificado, lo descomentas:
             // if (!user.isVerified()) {
-            //     loginAttemptService.logAttempt(user, ip, false, "Email no verificado.");
-            //     return ServiceResult.error(HttpStatus.FORBIDDEN, "Debes verificar tu email.");
+            // loginAttemptService.logAttempt(user, ip, false, "Email no verificado.");
+            // return ServiceResult.error(HttpStatus.FORBIDDEN, "Debes verificar tu
+            // email.");
             // }
 
             Authentication authentication = buildAuthenticationFromUser(user);
@@ -154,8 +165,7 @@ public class UserServiceImpl implements UserService {
             userRepository.findByEmail(request.email())
                     .ifPresentOrElse(
                             u -> loginAttemptService.logAttempt(u, ip, false, "Credenciales inválidas."),
-                            () -> loginAttemptService.logAttempt(null, ip, false, "Credenciales inválidas.")
-                    );
+                            () -> loginAttemptService.logAttempt(null, ip, false, "Credenciales inválidas."));
             return ServiceResult.error(HttpStatus.UNAUTHORIZED, "Credenciales inválidas.");
 
         } catch (Exception e) {
@@ -163,7 +173,6 @@ public class UserServiceImpl implements UserService {
             return ServiceResult.error(HttpStatus.INTERNAL_SERVER_ERROR, "Error de autenticación.");
         }
     }
-
 
     /* -------- Perfil (/api/me) -------- */
     public ServiceResult<UserMeResponse> getProfile(Authentication authentication) {
@@ -217,23 +226,18 @@ public class UserServiceImpl implements UserService {
 
         // ❌ Cualquier otra cosa, no sabemos resolverla
         throw new UsernameNotFoundException(
-                "Tipo de principal no soportado: " + principal.getClass().getName()
-        );
+                "Tipo de principal no soportado: " + principal.getClass().getName());
     }
-
-
-
-
-
-
 
     /* =================== PROFILE & PASSWORD =================== */
 
     @Override
     @Transactional
-    public ServiceResult<UserMeResponse> updateProfile(Long userId, com.empresa.ecommerce_backend.dto.request.UpdateProfileRequest dto) {
+    public ServiceResult<UserMeResponse> updateProfile(Long userId,
+            com.empresa.ecommerce_backend.dto.request.UpdateProfileRequest dto) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException("Usuario no encontrado"));
+                .orElseThrow(() -> new com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException(
+                        "Usuario no encontrado"));
 
         user.setFirstName(dto.getFirstName());
         user.setLastName(dto.getLastName());
@@ -244,13 +248,16 @@ public class UserServiceImpl implements UserService {
 
     @Override
     @Transactional
-    public ServiceResult<Void> changePassword(Long userId, com.empresa.ecommerce_backend.dto.request.ChangePasswordRequest dto) {
+    public ServiceResult<Void> changePassword(Long userId,
+            com.empresa.ecommerce_backend.dto.request.ChangePasswordRequest dto) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException("Usuario no encontrado"));
+                .orElseThrow(() -> new com.empresa.ecommerce_backend.exception.RecursoNoEncontradoException(
+                        "Usuario no encontrado"));
 
         // Verificar que el usuario sea LOCAL
         if (user.getAuthProvider() != com.empresa.ecommerce_backend.enums.AuthProvider.LOCAL) {
-            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Los usuarios registrados con Google/Microsoft no pueden cambiar contraseña aquí.");
+            return ServiceResult.error(HttpStatus.BAD_REQUEST,
+                    "Los usuarios registrados con Google/Microsoft no pueden cambiar contraseña aquí.");
         }
 
         // Verificar password actual
@@ -280,9 +287,7 @@ public class UserServiceImpl implements UserService {
                         .map(role -> new SimpleGrantedAuthority(
                                 role.getName().name().startsWith("ROLE_")
                                         ? role.getName().name()
-                                        : "ROLE_" + role.getName().name()
-                        ))
-                        .collect(Collectors.toList())
-        );
+                                        : "ROLE_" + role.getName().name()))
+                        .collect(Collectors.toList()));
     }
 }

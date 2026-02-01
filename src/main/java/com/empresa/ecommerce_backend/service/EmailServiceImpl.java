@@ -64,13 +64,14 @@ public class EmailServiceImpl implements EmailService {
         if (order.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
             // 1. Enviar instrucciones de transferencia al usuario
             sendBankTransferInstructions(order);
-            
+
             // 2. Notificar al admin de nueva orden pendiente de transferencia
             sendNewTransferOrderAdminNotification(order);
         } else {
             // Para MercadoPago u otros, NO enviamos email de confirmación inicial.
-            // Se enviará solo cuando el pago sea APROBADO (sendPaymentApprovedNotification).
-            log.info("Orden #{} creada con {}. Esperando aprobación de pago para enviar email.", 
+            // Se enviará solo cuando el pago sea APROBADO
+            // (sendPaymentApprovedNotification).
+            log.info("Orden #{} creada con {}. Esperando aprobación de pago para enviar email.",
                     order.getOrderNumber(), order.getChosenPaymentMethod());
         }
     }
@@ -78,54 +79,65 @@ public class EmailServiceImpl implements EmailService {
     private void sendBankTransferInstructions(Order order) {
         String subject = "Instrucciones de Transferencia - Orden #" + order.getOrderNumber();
         List<BankAccount> accounts = bankAccountRepository.findByActiveTrue();
-        
+
         StringBuilder accountsHtml = new StringBuilder();
         if (accounts.isEmpty()) {
-            accountsHtml.append("<p><i>No hay cuentas bancarias activas disponibles en este momento. Por favor contáctanos.</i></p>");
+            accountsHtml.append(
+                    "<p><i>No hay cuentas bancarias activas disponibles en este momento. Por favor contáctanos.</i></p>");
         } else {
             accountsHtml.append("<h3>Datos Bancarios:</h3>");
             for (BankAccount acc : accounts) {
-                accountsHtml.append("<div style='border:1px solid #ddd; padding:10px; margin-bottom:10px; border-radius:5px;'>");
+                accountsHtml.append(
+                        "<div style='border:1px solid #ddd; padding:10px; margin-bottom:10px; border-radius:5px;'>");
                 accountsHtml.append("<p><b>Banco:</b> ").append(acc.getBankName()).append("</p>");
                 accountsHtml.append("<p><b>Titular:</b> ").append(acc.getHolderName()).append("</p>");
                 accountsHtml.append("<p><b>CBU/CVU:</b> ").append(acc.getCbu()).append("</p>");
-                if (acc.getAlias() != null) accountsHtml.append("<p><b>Alias:</b> ").append(acc.getAlias()).append("</p>");
-                if (acc.getAccountNumber() != null) accountsHtml.append("<p><b>Nro Cuenta:</b> ").append(acc.getAccountNumber()).append("</p>");
-                if (acc.getCuil() != null) accountsHtml.append("<p><b>CUIL/CUIT:</b> ").append(acc.getCuil()).append("</p>");
-                if (acc.getAccountType() != null) accountsHtml.append("<p><b>Tipo:</b> ").append(acc.getAccountType()).append("</p>");
+                if (acc.getAlias() != null)
+                    accountsHtml.append("<p><b>Alias:</b> ").append(acc.getAlias()).append("</p>");
+                if (acc.getAccountNumber() != null)
+                    accountsHtml.append("<p><b>Nro Cuenta:</b> ").append(acc.getAccountNumber()).append("</p>");
+                if (acc.getCuil() != null)
+                    accountsHtml.append("<p><b>CUIL/CUIT:</b> ").append(acc.getCuil()).append("</p>");
+                if (acc.getAccountType() != null)
+                    accountsHtml.append("<p><b>Tipo:</b> ").append(acc.getAccountType()).append("</p>");
                 accountsHtml.append("</div>");
             }
         }
 
         String body = """
-            <html>
-                <body style="font-family: Arial, sans-serif;">
-                    <h2>¡Gracias por tu compra!</h2>
-                    <p>Tu orden <b>#%s</b> ha sido creada exitosamente.</p>
-                    <p>Para finalizar, por favor realiza una transferencia bancaria por el total de <b>$%s</b> a cualquiera de las siguientes cuentas:</p>
-                    %s
-                    <hr/>
-                    <p>Una vez realizada la transferencia, por favor informanos el pago desde tu perfil o respondiendo a este correo con el comprobante.</p>
-                    <p><i>Tenés 48 horas para realizar el pago antes de que la orden expire.</i></p>
-                </body>
-            </html>
-        """.formatted(order.getOrderNumber(), order.getTotalAmount(), accountsHtml.toString());
+                    <html>
+                        <body style="font-family: Arial, sans-serif;">
+                            <h2>¡Gracias por tu compra!</h2>
+                            <p>Tu orden <b>#%s</b> ha sido creada exitosamente.</p>
+                            <p>Para finalizar, por favor realiza una transferencia bancaria por el total de <b>$%s</b> a cualquiera de las siguientes cuentas:</p>
+                            %s
+                            <hr/>
+                            <p><b>IMPORTANTE:</b> Una vez realizada la transferencia, podés informarla directamente aquí:</p>
+                            <p><a href="%s/checkout/pending?orderNumber=%s" style="background-color:#4CAF50;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;display:inline-block;">Informar Transferencia</a></p>
+                            <p><i>Tenés 48 horas para realizar el pago antes de que la orden expire.</i></p>
+                        </body>
+                    </html>
+                """
+                .formatted(order.getOrderNumber(), order.getTotalAmount(), accountsHtml.toString(),
+                        (!isBlank(frontendBaseUrl) ? frontendBaseUrl : "http://localhost:3000"),
+                        order.getOrderNumber());
 
-        sendHtmlEmail(order.getUser().getEmail(), subject, body);
+        sendHtmlEmail(getOrderEmailSafe(order), subject, body);
     }
 
     private void sendNewTransferOrderAdminNotification(Order order) {
         String subject = "[ADMIN] Nueva Orden por Transferencia - #" + order.getOrderNumber();
         String body = """
-            <html>
-                <body style="font-family: Arial, sans-serif;">
-                    <h2>Nueva Orden por Transferencia</h2>
-                    <p>El usuario <b>%s</b> ha iniciado la orden <b>#%s</b> seleccionando Transferencia Bancaria.</p>
-                    <p><b>Monto Total:</b> $%s</p>
-                    <p>Estado actual: PENDIENTE DE PAGO</p>
-                </body>
-            </html>
-        """.formatted(order.getUser().getEmail(), order.getOrderNumber(), order.getTotalAmount());
+                    <html>
+                        <body style="font-family: Arial, sans-serif;">
+                            <h2>Nueva Orden por Transferencia</h2>
+                            <p>El usuario <b>%s</b> ha iniciado la orden <b>#%s</b> seleccionando Transferencia Bancaria.</p>
+                            <p><b>Monto Total:</b> $%s</p>
+                            <p>Estado actual: PENDIENTE DE PAGO</p>
+                        </body>
+                    </html>
+                """
+                .formatted(getOrderEmailSafe(order), order.getOrderNumber(), order.getTotalAmount());
 
         sendHtmlEmail(adminEmail, subject, body);
     }
@@ -135,24 +147,27 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sendTransferPendingAdminNotification(Long orderId, Long paymentId) {
         Order order = orderRepo.findById(orderId).orElse(null);
-        if (order == null) return;
-        
+        if (order == null)
+            return;
+
         Payment payment = order.getPayment(); // Assuming payment is loaded or fetch it if needed
         if (payment == null || !payment.getId().equals(paymentId)) {
-             // Fallback if payment not found on order or mismatch
-             return; 
+            // Fallback if payment not found on order or mismatch
+            return;
         }
 
         String subject = "[ADMIN] Transferencia Informada - Orden #" + order.getOrderNumber();
         String body = "<h1>Transferencia Informada</h1>" +
-                "<p>El usuario ha informado una transferencia para la orden <b>" + order.getOrderNumber() + "</b>.</p>" +
+                "<p>El usuario ha informado una transferencia para la orden <b>" + order.getOrderNumber() + "</b>.</p>"
+                +
                 "<ul>" +
                 "<li>Monto Informado: $" + payment.getAmount() + "</li>" +
                 "<li>Referencia: " + payment.getTransferReference() + "</li>" +
-                "<li>Comprobante: <a href='" + (payment.getReceiptUrl() != null ? payment.getReceiptUrl() : "#") + "'>Ver Comprobante</a></li>" +
+                "<li>Comprobante: <a href='" + (payment.getReceiptUrl() != null ? payment.getReceiptUrl() : "#")
+                + "'>Ver Comprobante</a></li>" +
                 "</ul>" +
                 "<p>Por favor, verificá la acreditación y aprobá el pago en el panel de administración.</p>";
-        
+
         sendHtmlEmail(adminEmail, subject, body);
     }
 
@@ -161,11 +176,13 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sendPaymentApprovedNotification(Long orderId) {
         Order order = orderRepo.findWithItemsById(orderId).orElse(null);
-        if (order == null) return;
+        if (order == null)
+            return;
 
         String subject = "Pago Aprobado - Orden #" + order.getOrderNumber();
-        String body = buildOrderHtml(order, "¡Pago Aprobado!", "Hemos recibido tu pago correctamente. Pronto prepararemos tu pedido.");
-        sendHtmlEmail(order.getUser().getEmail(), subject, body);
+        String body = buildOrderHtml(order, "¡Pago Aprobado!",
+                "Hemos recibido tu pago correctamente. Pronto prepararemos tu pedido.");
+        sendHtmlEmail(getOrderEmailSafe(order), subject, body);
     }
 
     @Async("mailExecutor")
@@ -173,29 +190,33 @@ public class EmailServiceImpl implements EmailService {
     @Override
     public void sendPaymentExpiredNotification(Long orderId) {
         Order order = orderRepo.findById(orderId).orElse(null);
-        if (order == null) return;
+        if (order == null)
+            return;
 
         String subject = "Orden Cancelada por Expiración - #" + order.getOrderNumber();
         String body = """
-            <html>
-                <body style="font-family: Arial, sans-serif;">
-                    <h2>Orden Cancelada</h2>
-                    <p>Lamentablemente, tu orden <b>#%s</b> ha sido cancelada por falta de confirmación de pago.</p>
-                    <p>Si realizaste la transferencia, por favor contactanos con el comprobante.</p>
-                    <p>Si aún estás interesado en tu compra, podés crear una nueva orden desde nuestra web.</p>
-                    <p><i>Recordá que tenés que confirmar la transferencia dentro de las 2 horas de creada la orden.</i></p>
-                </body>
-            </html>
-        """.formatted(order.getOrderNumber());
+                    <html>
+                        <body style="font-family: Arial, sans-serif;">
+                            <h2>Orden Cancelada</h2>
+                            <p>Lamentablemente, tu orden <b>#%s</b> ha sido cancelada por falta de confirmación de pago.</p>
+                            <p>Si realizaste la transferencia, por favor contactanos con el comprobante.</p>
+                            <p>Si aún estás interesado en tu compra, podés crear una nueva orden desde nuestra web.</p>
+                            <p><i>Recordá que tenés que confirmar la transferencia dentro de las 2 horas de creada la orden.</i></p>
+                        </body>
+                    </html>
+                """
+                .formatted(order.getOrderNumber());
 
-        sendHtmlEmail(order.getUser().getEmail(), subject, body);
+        sendHtmlEmail(getOrderEmailSafe(order), subject, body);
     }
 
     @Async("mailExecutor")
     @Override
     public void sendVerificationEmail(String to, String token) {
-        if (to == null || to.isBlank()) throw new EmailSendingException("Destinatario vacío", null);
-        if (token == null || token.isBlank()) throw new EmailSendingException("Token vacío", null);
+        if (to == null || to.isBlank())
+            throw new EmailSendingException("Destinatario vacío", null);
+        if (token == null || token.isBlank())
+            throw new EmailSendingException("Token vacío", null);
 
         final String base = normalizeBase(!isBlank(frontendBaseUrl) ? frontendBaseUrl : backendBaseUrl);
         final String path = !isBlank(frontendBaseUrl) ? "/verify-email" : "/api/verify-email";
@@ -208,22 +229,34 @@ public class EmailServiceImpl implements EmailService {
                 .toUriString();
 
         String htmlContent = """
-            <html>
-                <body style="font-family: Arial, sans-serif;">
-                    <h2>¡Bienvenido!</h2>
-                    <p>Haz clic en el botón para verificar tu cuenta:</p>
-                    <p>
-                      <a href="%s" style="display:inline-block;padding:10px 20px;background-color:#4CAF50;color:white;text-decoration:none;border-radius:5px;">
-                        Verificar cuenta
-                      </a>
-                    </p>
-                    <p>O copia y pega este enlace en tu navegador:</p>
-                    <p><a href="%s">%s</a></p>
-                </body>
-            </html>
-        """.formatted(verificationUrl, verificationUrl, verificationUrl);
+                    <html>
+                        <body style="font-family: Arial, sans-serif;">
+                            <h2>¡Bienvenido!</h2>
+                            <p>Haz clic en el botón para verificar tu cuenta:</p>
+                            <p>
+                              <a href="%s" style="display:inline-block;padding:10px 20px;background-color:#4CAF50;color:white;text-decoration:none;border-radius:5px;">
+                                Verificar cuenta
+                              </a>
+                            </p>
+                            <p>O copia y pega este enlace en tu navegador:</p>
+                            <p><a href="%s">%s</a></p>
+                        </body>
+                    </html>
+                """
+                .formatted(verificationUrl, verificationUrl, verificationUrl);
 
         sendHtmlEmail(to, verifySubject, htmlContent);
+    }
+
+    // Helper para obtener email de user o guest
+    private String getOrderEmailSafe(Order order) {
+        if (order.getUser() != null) {
+            return order.getUser().getEmail();
+        }
+        if (order.isGuestOrder()) {
+            return order.getGuestEmail();
+        }
+        return null;
     }
 
     private void sendHtmlEmail(String to, String subject, String htmlBody) {
@@ -232,8 +265,7 @@ public class EmailServiceImpl implements EmailService {
                     "from", fromEmail,
                     "to", to,
                     "subject", subject,
-                    "html", htmlBody
-            );
+                    "html", htmlBody);
 
             String jsonBody = objectMapper.writeValueAsString(payload);
 
@@ -265,7 +297,7 @@ public class EmailServiceImpl implements EmailService {
         sb.append("<h3>Detalle de la Orden #").append(order.getOrderNumber()).append("</h3>");
         sb.append("<table border='1' cellpadding='5' cellspacing='0'>");
         sb.append("<tr><th>Producto</th><th>Cant</th><th>Total</th></tr>");
-        
+
         if (order.getItems() != null) {
             order.getItems().forEach(item -> {
                 sb.append("<tr>");
@@ -275,7 +307,7 @@ public class EmailServiceImpl implements EmailService {
                 sb.append("</tr>");
             });
         }
-        
+
         sb.append("</table>");
         sb.append("<p><b>Total: $").append(order.getTotalAmount()).append("</b></p>");
         sb.append("</body></html>");
