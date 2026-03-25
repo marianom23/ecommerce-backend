@@ -166,10 +166,11 @@ public class PaymentServiceImpl implements PaymentService {
                     tryLinkOrderToUser(o);
 
                     // 👇 Marcar orden como pagada + timestamp y registrar ventas
-                    if (o.getPaidAt() == null)
-                        o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
+                    if (o.getPaidAt() == null) {
+                        o.setPaidAt(LocalDateTime.now());
+                        registerSale(o); // 👈 Solo registra si no estaba ya pagada
+                    }
                     o.setStatus(OrderStatus.PAID);
-                    registerSale(o); // 👈 NUEVO: suma soldCount en variant y product
                     orderRepo.save(o);
 
                     // 📧 Notificar pago aprobado
@@ -196,7 +197,7 @@ public class PaymentServiceImpl implements PaymentService {
                     return o;
                 }
                 case REJECTED, CANCELED, EXPIRED -> {
-                    rollbackStock(o);
+                    rollbackStockAndSales(o);
                     o.setStatus(OrderStatus.CANCELED);
                     orderRepo.save(o);
                 }
@@ -263,10 +264,11 @@ public class PaymentServiceImpl implements PaymentService {
             tryLinkOrderToUser(o);
 
             // 👇 Marcar orden como pagada + timestamp y registrar ventas
-            if (o.getPaidAt() == null)
-                o.setPaidAt(LocalDateTime.now()); // 👈 NUEVO
+            if (o.getPaidAt() == null) {
+                o.setPaidAt(LocalDateTime.now());
+                registerSale(o);
+            }
             o.setStatus(OrderStatus.PAID);
-            registerSale(o); // 👈 NUEVO
 
             // 📧 Notificar pago aprobado
             emailService.sendPaymentApprovedNotification(o.getId());
@@ -289,7 +291,7 @@ public class PaymentServiceImpl implements PaymentService {
                     "order-" + o.getOrderNumber());
 
         } else {
-            rollbackStock(o);
+            rollbackStockAndSales(o);
             o.setStatus(OrderStatus.CANCELED);
         }
         orderRepo.save(o);
@@ -309,13 +311,36 @@ public class PaymentServiceImpl implements PaymentService {
             var product = v.getProduct();
             int qty = oi.getQuantity();
 
-            // sumar ventas por SKU
+            // sumar ventas por SKU (variante)
             v.setSoldCount(v.getSoldCount() + qty);
             variantRepo.save(v);
 
-            // sumar ventas por producto (ranking catálogo)
+            // sumar ventas por producto base (ranking catálogo)
             if (product != null) {
                 product.setSoldCount(product.getSoldCount() + qty);
+                productRepo.save(product);
+            }
+        }
+    }
+
+    private void deregisterSale(Order o) {
+        if (o.getItems() == null)
+            return;
+
+        for (OrderItem oi : o.getItems()) {
+            var v = oi.getVariant();
+            if (v == null)
+                continue;
+            var product = v.getProduct();
+            int qty = oi.getQuantity();
+
+            // restar ventas por SKU (variante)
+            v.setSoldCount(Math.max(0, v.getSoldCount() - qty));
+            variantRepo.save(v);
+
+            // restar ventas por producto base
+            if (product != null) {
+                product.setSoldCount(Math.max(0, product.getSoldCount() - qty));
                 productRepo.save(product);
             }
         }
@@ -339,7 +364,7 @@ public class PaymentServiceImpl implements PaymentService {
         p.setExpiresAt(null);
         paymentRepo.save(p);
 
-        rollbackStock(o);
+        rollbackStockAndSales(o);
         o.setStatus(OrderStatus.CANCELED);
         orderRepo.save(o);
 
@@ -362,7 +387,7 @@ public class PaymentServiceImpl implements PaymentService {
             saveEvent(p, prev, PaymentStatus.EXPIRED, "system", "timeout");
 
             var o = p.getOrder();
-            rollbackStock(o);
+            rollbackStockAndSales(o);
             o.setStatus(OrderStatus.CANCELED);
             orderRepo.save(o);
 
@@ -536,9 +561,17 @@ public class PaymentServiceImpl implements PaymentService {
         paymentEventRepo.save(ev);
     }
 
-    private void rollbackStock(Order o) {
+    private void rollbackStockAndSales(Order o) {
         if (o.getItems() == null)
             return;
+
+        // Si la orden ya estaba pagada, tenemos que descontar las ventas registradas
+        if (o.getPaidAt() != null) {
+            deregisterSale(o);
+            o.setPaidAt(null);
+            // orderRepo.save(o); // Se asume que el llamador guarda la orden (o.setStatus...)
+        }
+
         o.getItems().forEach(oi -> {
             var v = oi.getVariant();
             if (v != null) {
