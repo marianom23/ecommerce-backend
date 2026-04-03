@@ -118,13 +118,20 @@ public class ProductServiceImpl implements ProductService {
                     : Math.max(1, params.getSinceDays()); // evita 0 o negativos
             LocalDateTime since = LocalDateTime.now().minusDays(days);
 
+            com.empresa.ecommerce_backend.enums.ProductType typeEnum = null;
+            if (params.getProductType() != null) {
+                try {
+                    typeEnum = com.empresa.ecommerce_backend.enums.ProductType.valueOf(params.getProductType());
+                } catch (IllegalArgumentException ignored) {}
+            }
+
             page = productRepository.findBestSellingSince(
                     since,
                     params.getCategoryId(),
                     params.getBrandId(),
+                    typeEnum,
                     q,
                     Boolean.TRUE.equals(params.getInStockOnly()),
-                    Boolean.TRUE.equals(params.getExcludeDLC()),
                     pageable);
         } else {
             // camino actual con Specifications

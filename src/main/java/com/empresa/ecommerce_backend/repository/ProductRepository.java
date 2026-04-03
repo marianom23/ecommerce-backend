@@ -67,16 +67,16 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
           LEFT JOIN p.variants v
           LEFT JOIN OrderItem oi ON oi.variant = v
           LEFT JOIN oi.order o
-          WHERE (:categoryId IS NULL OR p.category.id = :categoryId)
-            AND (:brandId    IS NULL OR p.brand.id    = :brandId)
-            AND (:nameLike   IS NULL OR LOWER(p.name) LIKE LOWER(:nameLike))
+          WHERE (:categoryId  IS NULL OR p.category.id = :categoryId)
+            AND (:brandId     IS NULL OR p.brand.id    = :brandId)
+            AND (:productType IS NULL OR p.productType = :productType)
+            AND (:nameLike    IS NULL OR LOWER(p.name) LIKE LOWER(:nameLike))
             AND (:inStockOnly = FALSE OR EXISTS (
                    SELECT 1 FROM ProductVariant v2
                    WHERE v2.product = p
                      AND (v2.stock > 0
                        OR v2.fulfillmentType = com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND)
                 ))
-            AND (:excludeDLC = FALSE OR p.productType != com.empresa.ecommerce_backend.enums.ProductType.DLC)
             AND (o.status IN ('PAID','SHIPPED','DELIVERED'))
             AND (o.paidAt IS NOT NULL AND o.paidAt >= :since)
           GROUP BY p.id
@@ -86,9 +86,9 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
       @Param("since") LocalDateTime since,
       @Param("categoryId") Long categoryId,
       @Param("brandId") Long brandId,
+      @Param("productType") com.empresa.ecommerce_backend.enums.ProductType productType,
       @Param("nameLike") String nameLike,
       @Param("inStockOnly") boolean inStockOnly,
-      @Param("excludeDLC") boolean excludeDLC,
       Pageable pageable);
 
   Optional<Product> findBySku(String sku);
@@ -107,7 +107,7 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
   @EntityGraph(attributePaths = { "discounts", "tags" })
   Optional<Product> findWithDiscountsAndTagsById(Long id);
 
-  @Query("SELECT DISTINCT p FROM Product p LEFT JOIN p.variants v WHERE (p.productType IS NULL OR p.productType = com.empresa.ecommerce_backend.enums.ProductType.GAME)")
+  @Query("SELECT DISTINCT p FROM Product p LEFT JOIN p.variants v WHERE p.productType = com.empresa.ecommerce_backend.enums.ProductType.GAME")
   List<Product> findDigitalProducts();
 
   /** Retorna todos los DLCs asociados a un juego padre */
