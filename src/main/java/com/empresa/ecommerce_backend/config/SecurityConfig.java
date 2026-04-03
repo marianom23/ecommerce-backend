@@ -152,6 +152,8 @@ public class SecurityConfig {
                                 "https://hornerotech.com.ar",
                                 "https://www.hornerotech.com.ar",
                                 "https://qa.hornerotech.com.ar",
+                                "https://backoffice-hornero.vercel.app",
+                                "https://qa-backoffice-hornero.vercel.app",
                                 "https://ecommerce-backoffice-alpha.vercel.app"));
                 config.setAllowedMethods(List.of("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"));
                 config.setAllowedHeaders(List.of("*"));

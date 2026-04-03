@@ -44,6 +44,15 @@ public class ProductDetailsResponse {
     private String fulfillmentType; // e.g., "DELIVERY", "PICKUP"
     private String type;            // e.g., "SIMPLE" o "VARIABLE"
 
+    // --- Relaciones DLC ---
+    // Si este producto es un JUEGO: lista de DLCs anidados
+    private List<DlcSummaryDto> dlcs;
+    // Si este producto es un DLC: referencia al juego padre
+    private Long parentGameId;
+    private String parentGameName;
+
+    private String specificationsJson;
+
     @Data
     public static class ImagesDto {
         private List<String> urls;
@@ -67,5 +76,14 @@ public class ProductDetailsResponse {
         private Integer stock;
         private Map<String, String> attributes;
         private ImagesDto imgs;
+    }
+
+    /** Resumen de un DLC asociado a este juego */
+    @Data
+    public static class DlcSummaryDto {
+        private Long id;
+        private String name;
+        private BigDecimal price;
+        private String imageUrl;
     }
 }

@@ -26,6 +26,9 @@ public class ProductPaginatedRequest {
 
     private Long categoryId;
     private Long brandId;
+    private Long consoleId;
+    private String productType; // GAME, DLC, etc.
+    private Boolean excludeDLC = false;
 
     // búsqueda por nombre
     private String q;

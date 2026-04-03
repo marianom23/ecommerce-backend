@@ -39,6 +39,21 @@ public class ProductSpecs {
         return (root, query, cb) -> cb.equal(root.get("brand").get("id"), brandId);
     }
 
+    public static Specification<Product> hasConsole(Long consoleId) {
+        if (consoleId == null) return null;
+        return (root, query, cb) -> cb.equal(root.get("console").get("id"), consoleId);
+    }
+
+    public static Specification<Product> hasProductType(com.empresa.ecommerce_backend.enums.ProductType type) {
+        if (type == null) return null;
+        return (root, query, cb) -> cb.equal(root.get("productType"), type);
+    }
+
+    public static Specification<Product> isNotProductType(com.empresa.ecommerce_backend.enums.ProductType type) {
+        if (type == null) return null;
+        return (root, query, cb) -> cb.notEqual(root.get("productType"), type);
+    }
+
     public static Specification<Product> nameContains(String q) {
         if (q == null || q.isBlank()) return null;
         return (root, query, cb) -> cb.like(cb.lower(root.get("name")), "%" + q.toLowerCase() + "%");

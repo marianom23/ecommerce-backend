@@ -20,8 +20,8 @@ public interface ProductDetailsMapper {
     @Mapping(target = "totalReviews", ignore = true)
     // precios representativos desde variantes
     @Mapping(target = "price",           expression = "java(minVariantPrice(variants))")
-    @Mapping(target = "discountedPrice", expression = "java(discountedMinVariantPrice(product, variants))")
-    @Mapping(target = "priceWithTransfer", expression = "java(priceWithTransfer(product, variants))") // 👈 NUEVO
+    @Mapping(target = "discountedPrice", expression = "java(discountedMinVariantPrice(product, variants, globalDiscounts))")
+    @Mapping(target = "priceWithTransfer", expression = "java(priceWithTransfer(product, variants, globalDiscounts, transferDiscountPct))")
     // imágenes del producto (no de variante)
     @Mapping(target = "imgs", expression = "java(buildProductImages(product))")
     // metadatos
@@ -35,7 +35,7 @@ public interface ProductDetailsMapper {
     @Mapping(target = "hasVariants",       expression = "java(variants != null && !variants.isEmpty())")
     @Mapping(target = "variantAttributes", expression = "java(buildVariantAttributes(variants))")
     @Mapping(target = "variantOptions",    expression = "java(buildVariantOptions(variants))")
-    @Mapping(target = "variants",          expression = "java(mapVariants(product, variants))")
+    @Mapping(target = "variants",          expression = "java(mapVariants(product, variants, globalDiscounts, transferDiscountPct))")
     // stock total (suma de variantes)
     @Mapping(target = "stock",             expression = "java(totalVariantStock(variants))")
     // Medidas representativas desde la variante
@@ -46,7 +46,7 @@ public interface ProductDetailsMapper {
     // NUEVOS: alineados con ProductResponse
     @Mapping(target = "fulfillmentType", expression = "java(resolveFulfillmentType(product, variants))")
     @Mapping(target = "type",            expression = "java(resolveProductType(product, variants))")
-    ProductDetailsResponse toDetails(Product product, java.util.List<ProductVariant> variants);
+    ProductDetailsResponse toDetails(Product product, java.util.List<ProductVariant> variants, @Context List<Discount> globalDiscounts, @Context BigDecimal transferDiscountPct);
 
     // ---------- Precio representativo (mínimo entre variantes) ----------
     default BigDecimal minVariantPrice(List<ProductVariant> variants) {
@@ -59,21 +59,23 @@ public interface ProductDetailsMapper {
     }
 
     // Descuento aplicado al precio representativo mínimo
-    default BigDecimal discountedMinVariantPrice(Product product, List<ProductVariant> variants) {
+    default BigDecimal discountedMinVariantPrice(Product product, List<ProductVariant> variants, @Context List<Discount> globalDiscounts) {
         BigDecimal base = minVariantPrice(variants);
         if (base == null) return null;
-        return applyBestDiscount(base, product != null ? product.getDiscounts() : null);
+        return applyBestDiscount(base, (product != null ? product.getDiscounts() : null), globalDiscounts);
     }
 
-    // Precio con transferencia (10% off sobre el precio con descuento)
-    default BigDecimal priceWithTransfer(Product product, List<ProductVariant> variants) {
-        BigDecimal discounted = discountedMinVariantPrice(product, variants);
-        return applyTransferDiscount(discounted);
+    // Precio con transferencia usando porcentaje dinámico
+    default BigDecimal priceWithTransfer(Product product, List<ProductVariant> variants, @Context List<Discount> globalDiscounts, @Context BigDecimal transferDiscountPct) {
+        BigDecimal discounted = discountedMinVariantPrice(product, variants, globalDiscounts);
+        return applyTransferDiscount(discounted, transferDiscountPct);
     }
 
-    default BigDecimal applyTransferDiscount(BigDecimal amount) {
+    default BigDecimal applyTransferDiscount(BigDecimal amount, @Context BigDecimal transferDiscountPct) {
         if (amount == null) return null;
-        BigDecimal discount = amount.multiply(new BigDecimal("0.05"));
+        if (transferDiscountPct == null || transferDiscountPct.compareTo(BigDecimal.ZERO) <= 0) return amount;
+
+        BigDecimal discount = amount.multiply(transferDiscountPct).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
         return amount.subtract(discount).setScale(2, RoundingMode.HALF_UP);
     }
 
@@ -154,7 +156,7 @@ public interface ProductDetailsMapper {
         return result;
     }
 
-    default List<ProductDetailsResponse.VariantDto> mapVariants(Product product, List<ProductVariant> variants) {
+    default List<ProductDetailsResponse.VariantDto> mapVariants(Product product, List<ProductVariant> variants, @Context List<Discount> globalDiscounts, @Context BigDecimal transferDiscountPct) {
         if (variants == null || variants.isEmpty()) return List.of();
 
         Set<Discount> productDiscounts = (product != null) ? product.getDiscounts() : null;
@@ -165,9 +167,9 @@ public interface ProductDetailsMapper {
                     dto.setId(v.getId());
                     dto.setSku(v.getSku());
                     dto.setPrice(v.getPrice());
-                    BigDecimal discounted = applyBestDiscount(v.getPrice(), productDiscounts);
+                    BigDecimal discounted = applyBestDiscount(v.getPrice(), productDiscounts, globalDiscounts);
                     dto.setDiscountedPrice(discounted);
-                    dto.setPriceWithTransfer(applyTransferDiscount(discounted)); // 👈 NUEVO
+                    dto.setPriceWithTransfer(applyTransferDiscount(discounted, transferDiscountPct));
                     dto.setStock(v.getStock());
                     dto.setAttributes(parseAttributesJson(v));
                     dto.setImgs(buildVariantImages(v));
@@ -214,27 +216,36 @@ public interface ProductDetailsMapper {
     }
 
     // ---------- Descuentos ----------
-    default BigDecimal applyBestDiscount(BigDecimal base, Set<Discount> discounts) {
+    default BigDecimal applyBestDiscount(BigDecimal base, Set<Discount> productDiscounts, @Context List<Discount> globalDiscounts) {
         if (base == null) return null;
-        if (discounts == null || discounts.isEmpty()) return base.setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal best = base;
-        for (Discount d : discounts) {
-            BigDecimal candidate = base;
 
-            BigDecimal percent = getPercentage(d);
-            BigDecimal amount  = getFixedAmount(d);
-
-            if (percent != null && percent.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal off = base.multiply(percent).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-                candidate = base.subtract(off);
-            } else if (amount != null && amount.compareTo(BigDecimal.ZERO) > 0) {
-                candidate = base.subtract(amount);
+        // 1. Evaluar específicos
+        if (productDiscounts != null) {
+            for (Discount d : productDiscounts) {
+                best = applyIfBetter(base, best, d);
             }
-
-            if (candidate.compareTo(best) < 0) best = candidate;
         }
+
+        // 2. Evaluar globales
+        if (globalDiscounts != null) {
+            for (Discount d : globalDiscounts) {
+                best = applyIfBetter(base, best, d);
+            }
+        }
+
         return best.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal applyIfBetter(BigDecimal base, BigDecimal currentBest, Discount d) {
+        BigDecimal pct = getPercentage(d);
+        if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal off = base.multiply(pct).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
+            BigDecimal candidate = base.subtract(off);
+            if (candidate.compareTo(currentBest) < 0) return candidate;
+        }
+        return currentBest;
     }
 
     // Ajustá estos getters a tu entidad Discount

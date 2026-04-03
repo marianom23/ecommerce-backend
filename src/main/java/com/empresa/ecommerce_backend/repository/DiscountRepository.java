@@ -25,4 +25,13 @@ public interface DiscountRepository extends BaseRepository<Discount, Long> {
 
     // Por producto
     List<Discount> findByProducts_Id(Long productId);
+
+    // Descuentos "anchos" (globales o por tipo)
+    @Query("""
+           select d from Discount d
+           where (d.startDate is null or d.startDate <= :now)
+             and (d.endDate   is null or d.endDate   >= :now)
+             and (d.isGlobal = true or d.productType = :type)
+           """)
+    List<Discount> findActiveBroadDiscounts(java.time.LocalDateTime now, com.empresa.ecommerce_backend.enums.ProductType type);
 }

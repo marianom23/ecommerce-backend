@@ -8,5 +8,6 @@ import java.util.List;
 public class ProductFacetsResponse {
     private List<CategoryFacetResponse> categoryFacets;
     private List<BrandFacetResponse> brandFacets;
+    private List<ConsoleFacetResponse> consoleFacets;
     private PriceRangeResponse priceRange;
 }
