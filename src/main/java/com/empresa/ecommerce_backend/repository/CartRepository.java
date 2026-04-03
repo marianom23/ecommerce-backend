@@ -13,15 +13,19 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface CartRepository extends BaseRepository<Cart, Long> {
 
+    @EntityGraph(attributePaths = {"items", "items.product", "items.variant", "items.product.images"})
     Optional<Cart> findBySessionId(String sessionId);
 
+    @EntityGraph(attributePaths = {"items", "items.product", "items.variant", "items.product.images"})
     Optional<Cart> findByUserId(Long userId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"items", "items.product", "items.variant", "items.product.images"})
     @Query("select c from Cart c where c.sessionId = :sessionId")
     Optional<Cart> lockBySessionId(@Param("sessionId") String sessionId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @EntityGraph(attributePaths = {"items", "items.product", "items.variant", "items.product.images"})
     @Query("select c from Cart c where c.user.id = :userId")
     Optional<Cart> lockByUserId(@Param("userId") Long userId);
 }
