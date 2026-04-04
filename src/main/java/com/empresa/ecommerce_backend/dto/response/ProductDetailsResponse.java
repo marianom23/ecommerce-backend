@@ -52,6 +52,8 @@ public class ProductDetailsResponse {
     private String parentGameName;
 
     private String specificationsJson;
+    private boolean presale;
+    private java.time.LocalDateTime releaseDate;
 
     @Data
     public static class ImagesDto {

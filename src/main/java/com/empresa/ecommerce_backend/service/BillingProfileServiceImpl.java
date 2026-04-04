@@ -52,14 +52,8 @@ public class BillingProfileServiceImpl implements BillingProfileService {
         Long uid = currentUserId();
         User user = userRepo.findById(uid).orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
 
-        Address addr = addressRepo.findById(dto.getBillingAddressId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Dirección de facturación no encontrada"));
-
-        // (opcional) validar que addr.user.id == uid y addr.type == BILLING
-
         BillingProfile entity = mapper.toEntity(dto);
         entity.setUser(user);
-        entity.setBillingAddress(addr);
 
         boolean wantDefault = Boolean.TRUE.equals(dto.getIsDefault());
         if (wantDefault) {
@@ -79,14 +73,6 @@ public class BillingProfileServiceImpl implements BillingProfileService {
                 .orElseThrow(() -> new RecursoNoEncontradoException("Perfil de facturación no encontrado"));
 
         mapper.updateFromDto(dto, existing);
-
-        // ¿cambió la dirección?
-        if (dto.getBillingAddressId() != null) {
-            Address addr = addressRepo.findById(dto.getBillingAddressId())
-                    .orElseThrow(() -> new RecursoNoEncontradoException("Dirección de facturación no encontrada"));
-            // (opcional) validar dueño y tipo
-            existing.setBillingAddress(addr);
-        }
 
         if (Boolean.TRUE.equals(dto.getIsDefault())) {
             repo.clearDefaultForUser(uid);

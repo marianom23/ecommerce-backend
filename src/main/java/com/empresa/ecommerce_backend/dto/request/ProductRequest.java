@@ -31,4 +31,7 @@ public class ProductRequest {
 
     // IDs de los descuentos individuales asociados al producto
     private List<Long> discountIds;
+
+    private Boolean isPresale;
+    private java.time.LocalDateTime releaseDate;
 }

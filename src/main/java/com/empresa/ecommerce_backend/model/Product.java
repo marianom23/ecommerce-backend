@@ -6,6 +6,7 @@ import lombok.*;
 
 import com.empresa.ecommerce_backend.enums.ProductType;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -104,4 +105,11 @@ public class Product {
     /** Especificaciones técnicas fijas del producto en formato JSON */
     @Column(name = "specifications_json", length = 2000)
     private String specificationsJson;
+
+    /** Soporte para Preventas (Pre-orders) */
+    @Column(name = "is_presale")
+    private Boolean isPresale = false;
+
+    @Column(name = "release_date")
+    private LocalDateTime releaseDate;
 }

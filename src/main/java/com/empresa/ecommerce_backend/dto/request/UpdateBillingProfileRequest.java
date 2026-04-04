@@ -17,6 +17,11 @@ public class UpdateBillingProfileRequest {
     private String email;
     private String phone;
 
+    private com.empresa.ecommerce_backend.enums.DocumentType documentType;
+    private String documentNumber;
+    private com.empresa.ecommerce_backend.enums.TaxCondition taxCondition;
+    private String businessName;
+
     // Opcionales para factura completa (guests con productos físicos)
     private String street;
     private String streetNumber;

@@ -34,8 +34,29 @@ public class BillingProfileRequest {
     @Size(max = 50)
     private String phone;
 
-    @NotNull
-    private Long billingAddressId;
+    @Size(max = 150)
+    private String street;
+
+    @Size(max = 20)
+    private String streetNumber;
+
+    @Size(max = 100)
+    private String city;
+
+    @Size(max = 100)
+    private String state;
+
+    @Size(max = 20)
+    private String postalCode;
+
+    @Size(max = 100)
+    private String country;
+
+    @Size(max = 20)
+    private String apartmentNumber;
+
+    @Size(max = 10)
+    private String floor;
 
     private Boolean isDefault;
 }

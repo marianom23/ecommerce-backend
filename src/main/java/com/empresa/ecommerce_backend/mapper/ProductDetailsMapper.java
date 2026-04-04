@@ -46,6 +46,8 @@ public interface ProductDetailsMapper {
     // NUEVOS: alineados con ProductResponse
     @Mapping(target = "fulfillmentType", expression = "java(resolveFulfillmentType(product, variants))")
     @Mapping(target = "type",            expression = "java(resolveProductType(product, variants))")
+    @Mapping(target = "presale",   source = "product.isPresale")
+    @Mapping(target = "releaseDate", source = "product.releaseDate")
     ProductDetailsResponse toDetails(Product product, java.util.List<ProductVariant> variants, @Context List<Discount> globalDiscounts, @Context BigDecimal transferDiscountPct);
 
     // ---------- Precio representativo (mínimo entre variantes) ----------

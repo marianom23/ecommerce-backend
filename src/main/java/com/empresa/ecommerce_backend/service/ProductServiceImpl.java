@@ -330,6 +330,8 @@ public class ProductServiceImpl implements ProductService {
         product.setName(request.getName());
         product.setDescription(request.getDescription());
         product.setSku(request.getSku());
+        product.setIsPresale(request.getIsPresale());
+        product.setReleaseDate(request.getReleaseDate());
 
         // Actualizar categoría si viene
         if (request.getCategoryId() != null) {
@@ -435,6 +437,8 @@ public class ProductServiceImpl implements ProductService {
                 ))
                 .toList();
         response.setImages(imageResponses);
+        response.setIsPresale(product.getIsPresale());
+        response.setReleaseDate(product.getReleaseDate());
 
         return ServiceResult.ok(response);
     }

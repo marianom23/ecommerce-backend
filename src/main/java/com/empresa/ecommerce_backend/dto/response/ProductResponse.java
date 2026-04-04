@@ -21,6 +21,9 @@ public class ProductResponse {
     private String consoleName;
     private String productType;
 
+    private Boolean isPresale;
+    private java.time.LocalDateTime releaseDate;
+
     @Data
     public static class ImagesDto {
         private List<String> urls;

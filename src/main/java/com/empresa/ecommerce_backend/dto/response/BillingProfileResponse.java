@@ -20,6 +20,13 @@ public class BillingProfileResponse {
     private String emailForInvoices;
     private String phone;
 
-    private Long billingAddressId;
+    private String street;
+    private String streetNumber;
+    private String city;
+    private String state;
+    private String postalCode;
+    private String country;
+    private String apartmentNumber;
+    private String floor;
     private boolean defaultProfile;
 }

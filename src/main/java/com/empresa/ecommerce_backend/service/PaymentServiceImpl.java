@@ -31,6 +31,9 @@ import java.util.Map;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
 
 @Service
 @RequiredArgsConstructor
@@ -55,6 +58,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Value("${front.base-url}")
     private String frontBaseUrl;
+
+    @Value("${mp.webhook-secret:}")
+    private String mpWebhookSecret;
 
     private final ObjectMapper om = new ObjectMapper();
 
@@ -117,7 +123,16 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Override
     @Transactional
-    public Order handleGatewayWebhook(String provider, Map<String, Object> payload) {
+    public Order handleGatewayWebhook(String provider, Map<String, Object> payload, Map<String, String> headers) {
+        // Validación de firma webhook de Mercado Pago
+        if ("MERCADO_PAGO".equals(provider) && mpWebhookSecret != null && !mpWebhookSecret.isBlank()) {
+            boolean isValid = validateMercadoPagoSignature(payload, headers);
+            if (!isValid) {
+                System.err.println("❌ Firma MP inválida. Rechazando webhook.");
+                return null;
+            }
+        }
+
         // 1) sacar payment_id del payload (body o query merged por el controller)
         String paymentId = extractMpPaymentId(payload);
         if (paymentId == null)
@@ -141,6 +156,12 @@ public class PaymentServiceImpl implements PaymentService {
         if (p == null)
             throw new IllegalStateException("La orden no tiene Payment");
 
+        // ✅ Validación de Método de Pago: Evitar que MP apruebe órdenes hechas por Transferencia
+        if (p.getMethod() != PaymentMethod.MERCADO_PAGO && p.getMethod() != PaymentMethod.CARD) {
+            System.err.println("❌ Webhook MP intentó aprobar una orden con método de pago distinto.");
+            return null;
+        }
+
         // Enlazá el payment_id real si aún no lo guardaste
         if (p.getProviderPaymentId() == null)
             p.setProviderPaymentId(mp.id());
@@ -152,6 +173,16 @@ public class PaymentServiceImpl implements PaymentService {
             case "pending", "in_process" -> PaymentStatus.PENDING;
             default -> PaymentStatus.PENDING;
         };
+
+        // 4) Validar monto (vulnerabilidad de external_reference spoofing)
+        if (newStatus == PaymentStatus.APPROVED) {
+            java.math.BigDecimal oTotal = o.getTotalAmount();
+            java.math.BigDecimal mpTotal = mp.transaction_amount();
+            if (mpTotal == null || mpTotal.compareTo(oTotal) != 0) {
+                System.err.println("❌ Monto de MP (" + mpTotal + ") no coincide con orden (" + oTotal + ")");
+                newStatus = PaymentStatus.PENDING; // No aprobamos
+            }
+        }
 
         if (p.getStatus() != newStatus) {
             var prev = p.getStatus();
@@ -526,13 +557,14 @@ public class PaymentServiceImpl implements PaymentService {
             return new MpPayment(
                     json.path("id").asText(),
                     json.path("status").asText(),
-                    json.path("external_reference").asText(null));
+                    json.path("external_reference").asText(null),
+                    java.math.BigDecimal.valueOf(json.path("transaction_amount").asDouble(0.0)));
         } catch (Exception e) {
             return null;
         }
     }
 
-    private record MpPayment(String id, String status, String external_reference) {
+    private record MpPayment(String id, String status, String external_reference, java.math.BigDecimal transaction_amount) {
     }
 
     // ===== comunes =====
@@ -596,6 +628,41 @@ public class PaymentServiceImpl implements PaymentService {
                 // Opcional: limpiar guestEmail o dejarlo como histórico
                 // o.setGuestEmail(null);
             });
+        }
+    }
+
+    private boolean validateMercadoPagoSignature(Map<String, Object> payload, Map<String, String> headers) {
+        String xSignature = headers.get("x-signature");
+        String xRequestId = headers.get("x-request-id");
+        if (xSignature == null || xRequestId == null) return false;
+
+        String ts = null;
+        String v1 = null;
+        for (String part : xSignature.split(",")) {
+            if (part.startsWith("ts=")) ts = part.substring(3);
+            else if (part.startsWith("v1=")) v1 = part.substring(3);
+        }
+        if (ts == null || v1 == null) return false;
+
+        String dataId = extractMpPaymentId(payload);
+        if (dataId == null) return false;
+
+        // manifest: id:[data.id];request-id:[x-request-id];ts:[ts];
+        String manifest = "id:" + dataId + ";request-id:" + xRequestId + ";ts:" + ts + ";";
+
+        try {
+            Mac sha256HMAC = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKey = new SecretKeySpec(mpWebhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            sha256HMAC.init(secretKey);
+
+            byte[] hashBytes = sha256HMAC.doFinal(manifest.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString().equalsIgnoreCase(v1);
+        } catch (Exception e) {
+            return false;
         }
     }
 }

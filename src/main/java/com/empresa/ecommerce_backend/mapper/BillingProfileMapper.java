@@ -12,21 +12,18 @@ public interface BillingProfileMapper {
     // DTO -> Entity (el service setea user y billingAddress)
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "user", ignore = true)
-    @Mapping(target = "billingAddress", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(source = "isDefault", target = "defaultProfile")
     BillingProfile toEntity(BillingProfileRequest dto);
 
     // Entity -> Response
-    @Mapping(target = "billingAddressId", source = "billingAddress.id")
     BillingProfileResponse toResponse(BillingProfile entity);
 
     // Update parcial (PUT/PATCH)
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "user", ignore = true)
-    @Mapping(target = "billingAddress", ignore = true) // se maneja en el service si viene otro ID
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
     @Mapping(source = "isDefault", target = "defaultProfile")
