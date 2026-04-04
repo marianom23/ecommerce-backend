@@ -1,5 +1,6 @@
 package com.empresa.ecommerce_backend.dto.response;
 
+import com.empresa.ecommerce_backend.enums.ProductType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Data;
 
@@ -43,6 +44,7 @@ public class ProductDetailsResponse {
     // ← NUEVOS CAMPOS (igual que en ProductResponse)
     private String fulfillmentType; // e.g., "DELIVERY", "PICKUP"
     private String type;            // e.g., "SIMPLE" o "VARIABLE"
+    private ProductType productType; // e.g., GAME, DLC, CONSOLE, ACCESSORY, OTHER
 
     // --- Relaciones DLC ---
     // Si este producto es un JUEGO: lista de DLCs anidados

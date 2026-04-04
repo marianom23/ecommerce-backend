@@ -46,9 +46,37 @@ public interface ProductDetailsMapper {
     // NUEVOS: alineados con ProductResponse
     @Mapping(target = "fulfillmentType", expression = "java(resolveFulfillmentType(product, variants))")
     @Mapping(target = "type",            expression = "java(resolveProductType(product, variants))")
+    @Mapping(target = "productType",     source = "product.productType")
     @Mapping(target = "presale",   source = "product.isPresale")
     @Mapping(target = "releaseDate", source = "product.releaseDate")
+    // DLC Relationships
+    @Mapping(target = "parentGameId",   source = "product.parentGame.id")
+    @Mapping(target = "parentGameName", source = "product.parentGame.name")
+    @Mapping(target = "dlcs",           expression = "java(mapDlcsToSummary(product.getDlcs()))")
     ProductDetailsResponse toDetails(Product product, java.util.List<ProductVariant> variants, @Context List<Discount> globalDiscounts, @Context BigDecimal transferDiscountPct);
+
+    // ---------- DLC Mapping ----------
+    default List<ProductDetailsResponse.DlcSummaryDto> mapDlcsToSummary(List<Product> dlcs) {
+        if (dlcs == null || dlcs.isEmpty()) return List.of();
+        return dlcs.stream()
+                .filter(Objects::nonNull)
+                .map(d -> {
+                    ProductDetailsResponse.DlcSummaryDto dto = new ProductDetailsResponse.DlcSummaryDto();
+                    dto.setId(d.getId());
+                    dto.setName(d.getName());
+                    // El precio del DLC es el precio mínimo de sus variantes
+                    dto.setPrice(minVariantPrice(new ArrayList<>(d.getVariants())));
+                    // Imagen: primera imagen del DLC
+                    dto.setImageUrl(d.getImages() != null && !d.getImages().isEmpty() 
+                        ? d.getImages().stream()
+                            .sorted(Comparator.comparing(ProductImage::getPosition, Comparator.nullsLast(Integer::compareTo)))
+                            .map(ProductImage::getUrl)
+                            .findFirst().orElse(null) 
+                        : null);
+                    return dto;
+                })
+                .toList();
+    }
 
     // ---------- Precio representativo (mínimo entre variantes) ----------
     default BigDecimal minVariantPrice(List<ProductVariant> variants) {
