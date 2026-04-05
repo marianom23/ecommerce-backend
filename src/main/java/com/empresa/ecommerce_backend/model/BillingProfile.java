@@ -63,10 +63,29 @@ public class BillingProfile {
     @Column(length = 50)
     private String phone;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "billing_address_id", nullable = false)
-    @NotNull
-    private Address billingAddress;      // Debe ser type=BILLING
+    @Column(length = 150)
+    private String street;
+
+    @Column(length = 20)
+    private String streetNumber;
+
+    @Column(length = 100)
+    private String city;
+
+    @Column(length = 100)
+    private String state;
+
+    @Column(length = 20)
+    private String postalCode;
+
+    @Column(length = 100)
+    private String country;
+
+    @Column(length = 20)
+    private String apartmentNumber;
+
+    @Column(length = 10)
+    private String floor;
 
     @Column(name = "is_default", nullable = false)
     private boolean defaultProfile = false;

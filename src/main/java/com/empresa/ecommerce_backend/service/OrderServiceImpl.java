@@ -162,6 +162,9 @@ public class OrderServiceImpl implements OrderService {
 
             // Consolidar en memoria antes de crear OrderItems
             OrderItem oi = itemsMap.get(v.getId());
+            BigDecimal discountedUnit = ci.getDiscountedPriceAtAddition() != null ? ci.getDiscountedPriceAtAddition() : v.getPrice();
+            BigDecimal itemDiscountAmount = v.getPrice().subtract(discountedUnit);
+
             if (oi == null) {
                 oi = new OrderItem();
                 oi.setOrder(order);
@@ -169,16 +172,16 @@ public class OrderServiceImpl implements OrderService {
                 oi.setProductName(v.getProduct().getName());
                 oi.setSku(v.getSku());
                 oi.setAttributesJson(v.getAttributesJson());
-                oi.setUnitPrice(v.getPrice());
+                oi.setUnitPrice(v.getPrice()); // Initial retail price
                 oi.setQuantity(0);
-                oi.setDiscountAmount(BigDecimal.ZERO);
+                oi.setDiscountAmount(itemDiscountAmount); // The savings generated per unit
                 oi.setLineTotal(BigDecimal.ZERO);
                 itemsMap.put(v.getId(), oi);
             }
 
             // Sumar cantidad y total
             oi.setQuantity(oi.getQuantity() + qty);
-            BigDecimal lineTotal = v.getPrice().multiply(BigDecimal.valueOf(qty));
+            BigDecimal lineTotal = discountedUnit.multiply(BigDecimal.valueOf(qty));
             oi.setLineTotal(oi.getLineTotal().add(lineTotal));
 
             subTotal = subTotal.add(lineTotal);
@@ -393,12 +396,8 @@ public class OrderServiceImpl implements OrderService {
             // Usuario autenticado: obtener de BD
             BillingProfile bp = billingRepo.findById(req.getBillingProfileId())
                     .orElseThrow(() -> new RecursoNoEncontradoException("Perfil de facturación no encontrado"));
-            Address billingAddr = bp.getBillingAddress();
-            if (billingAddr == null) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST,
-                        "El perfil de facturación no tiene dirección asociada");
-            }
-            billingSnapshot = SnapshotMapper.toSnapshot(bp, billingAddr);
+            
+            billingSnapshot = SnapshotMapper.toSnapshot(bp);
         } else {
             // Guest: crear snapshot desde request
             billingSnapshot = SnapshotMapper.fromRequest(req);
@@ -475,7 +474,7 @@ public class OrderServiceImpl implements OrderService {
         // Descuento por método de pago (Transferencia = 10% off)
         BigDecimal discountTotal = BigDecimal.ZERO;
         if (o.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
-            discountTotal = subTotal.multiply(new BigDecimal("0.05"));
+            discountTotal = subTotal.multiply(new BigDecimal("0.10"));
         }
 
         // Si hubiera otros descuentos (cupones), se sumarían aquí
@@ -605,8 +604,7 @@ public class OrderServiceImpl implements OrderService {
             com.empresa.ecommerce_backend.enums.PaymentStatus paymentStatus) {
 
         // Construir especificaciones dinámicamente
-        org.springframework.data.jpa.domain.Specification<Order> spec = org.springframework.data.jpa.domain.Specification
-                .where(null);
+        org.springframework.data.jpa.domain.Specification<Order> spec = (root, query, cb) -> cb.conjunction();
 
         // Filtro por búsqueda (order number o email usuario)
         if (search != null && !search.isBlank()) {

@@ -30,8 +30,8 @@ public final class SnapshotMapper {
         return s;
     }
 
-    public static BillingSnapshot toSnapshot(BillingProfile bp, Address billingAddr) {
-        if (bp == null || billingAddr == null)
+    public static BillingSnapshot toSnapshot(BillingProfile bp) {
+        if (bp == null)
             return null;
         BillingSnapshot s = new BillingSnapshot();
 
@@ -44,14 +44,14 @@ public final class SnapshotMapper {
         s.setEmailForInvoices(bp.getEmailForInvoices());
         s.setPhone(bp.getPhone());
 
-        s.setStreet(billingAddr.getStreet());
-        s.setStreetNumber(billingAddr.getStreetNumber());
-        s.setCity(billingAddr.getCity());
-        s.setState(billingAddr.getState());
-        s.setPostalCode(billingAddr.getPostalCode());
-        s.setCountry(billingAddr.getCountry());
-        s.setApartmentNumber(billingAddr.getApartmentNumber());
-        s.setFloor(billingAddr.getFloor());
+        s.setStreet(bp.getStreet());
+        s.setStreetNumber(bp.getStreetNumber());
+        s.setCity(bp.getCity());
+        s.setState(bp.getState());
+        s.setPostalCode(bp.getPostalCode());
+        s.setCountry(bp.getCountry());
+        s.setApartmentNumber(bp.getApartmentNumber());
+        s.setFloor(bp.getFloor());
 
         return s;
     }
@@ -82,6 +82,12 @@ public final class SnapshotMapper {
         s.setFullName(req.getFullName());
         s.setEmailForInvoices(req.getEmail());
         s.setPhone(req.getPhone());
+        
+        s.setDocumentType(req.getDocumentType());
+        s.setDocumentNumber(req.getDocumentNumber());
+        s.setTaxCondition(req.getTaxCondition());
+        s.setBusinessName(req.getBusinessName());
+        
         // Dirección fiscal (opcional para guests con productos digitales)
         s.setStreet(req.getStreet());
         s.setStreetNumber(req.getStreetNumber());

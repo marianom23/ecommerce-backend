@@ -18,6 +18,11 @@ public class ProductResponse {
     private int variantCount;        // 👈 cantidad de variantes
     private Long defaultVariantId;   // 👈 id de la variante única (si variantCount == 1)
     private String fulfillmentType;
+    private String consoleName;
+    private String productType;
+
+    private Boolean isPresale;
+    private java.time.LocalDateTime releaseDate;
 
     @Data
     public static class ImagesDto {

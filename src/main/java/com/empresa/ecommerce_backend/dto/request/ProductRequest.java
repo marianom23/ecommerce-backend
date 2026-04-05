@@ -2,6 +2,7 @@ package com.empresa.ecommerce_backend.dto.request;
 
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
+import java.util.List;
 
 @Data
 public class ProductRequest {
@@ -19,4 +20,18 @@ public class ProductRequest {
 
     private Long brandId;
     private Long categoryId;
+    private Long consoleId;
+    private String productType; // GAME, DLC, etc.
+
+    // Opcional: si el producto es un DLC, se puede indicar el juego al que pertenece
+    private Long parentGameId;
+
+    // Especificaciones técnicas fijas del producto en formato JSON
+    private String specificationsJson;
+
+    // IDs de los descuentos individuales asociados al producto
+    private List<Long> discountIds;
+
+    private Boolean isPresale;
+    private java.time.LocalDateTime releaseDate;
 }

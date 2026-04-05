@@ -24,10 +24,12 @@ public class ProductImage {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private Product product;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "variant_id") // null = imagen general del producto
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private ProductVariant variant;
 
 

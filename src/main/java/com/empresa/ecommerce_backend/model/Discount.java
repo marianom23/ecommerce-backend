@@ -46,7 +46,15 @@ public class Discount {
     private LocalDateTime startDate;
     private LocalDateTime endDate;
 
+    @Column(name = "is_global", nullable = false)
+    private boolean isGlobal = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "product_type", length = 30)
+    private com.empresa.ecommerce_backend.enums.ProductType productType;
+
     @ManyToMany(mappedBy = "discounts", fetch = FetchType.LAZY)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private Set<Product> products = new HashSet<>();
 
 }

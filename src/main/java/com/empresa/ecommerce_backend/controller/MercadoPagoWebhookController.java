@@ -17,10 +17,11 @@ public class MercadoPagoWebhookController {
 
     @PostMapping("/mercadopago")
     public ResponseEntity<String> handle(@RequestBody(required = false) Map<String,Object> body,
-                                         @RequestParam(required = false) Map<String,String> query) {
+                                         @RequestParam(required = false) Map<String,String> query,
+                                         @RequestHeader Map<String,String> headers) {
         Map<String,Object> payload = body != null ? new HashMap<>(body) : new HashMap<>();
         if (query != null) payload.putAll(query); // MP a veces manda topic & id por query
-        paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
+        paymentService.handleGatewayWebhook("MERCADO_PAGO", payload, headers);
         return ResponseEntity.ok("ok");
     }
 }

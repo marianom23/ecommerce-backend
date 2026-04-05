@@ -42,7 +42,13 @@ public class ProductServiceImpl implements ProductService {
     private final ProductMapper productMapper;
     private final ProductPageMapper productPageMapper;
     private final ProductVariantRepository productVariantRepository;
+    private final com.empresa.ecommerce_backend.repository.ConsoleRepository consoleRepository;
     private final com.empresa.ecommerce_backend.repository.ReviewRepository reviewRepository;
+    private final com.empresa.ecommerce_backend.repository.SystemSettingRepository systemSettingRepository;
+    private final com.empresa.ecommerce_backend.repository.DiscountRepository discountRepository;
+
+    private static final String TRANSFER_KEY = "TRANSFER_DISCOUNT_PCT";
+    private static final BigDecimal DEFAULT_TRANSFER = new BigDecimal("10.00");
 
     @Override
     @Transactional
@@ -51,8 +57,18 @@ public class ProductServiceImpl implements ProductService {
             return ServiceResult.error(HttpStatus.CONFLICT, "Ya existe un producto con ese SKU base.");
         }
         var entity = productMapper.toEntity(dto);
+
+        // Asociar juego padre si se pasa un parentGameId
+        if (dto.getParentGameId() != null) {
+            var parentGame = productRepository.findById(dto.getParentGameId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Juego padre no encontrado"));
+            entity.setParentGame(parentGame);
+        }
+
+        entity.setSpecificationsJson(dto.getSpecificationsJson());
+
         var saved = productRepository.save(entity);
-        var response = productMapper.toResponse(saved);
+        var response = productMapper.toResponse(saved, getActiveBroadDiscounts(saved.getProductType()), getTransferDiscount());
         enrichWithReviewStats(response, saved.getId());
         return ServiceResult.created(response);
     }
@@ -62,7 +78,7 @@ public class ProductServiceImpl implements ProductService {
         var list = productRepository.findAll()
                 .stream()
                 .map(p -> {
-                    var response = productMapper.toResponse(p);
+                    var response = productMapper.toResponse(p, getActiveBroadDiscounts(p.getProductType()), getTransferDiscount());
                     enrichWithReviewStats(response, p.getId());
                     return response;
                 })
@@ -74,7 +90,7 @@ public class ProductServiceImpl implements ProductService {
     public ServiceResult<ProductResponse> getProductById(Long id) {
         var product = productRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
-        var response = productMapper.toResponse(product);
+        var response = productMapper.toResponse(product, getActiveBroadDiscounts(product.getProductType()), getTransferDiscount());
         enrichWithReviewStats(response, id);
         return ServiceResult.ok(response);
     }
@@ -102,10 +118,18 @@ public class ProductServiceImpl implements ProductService {
                     : Math.max(1, params.getSinceDays()); // evita 0 o negativos
             LocalDateTime since = LocalDateTime.now().minusDays(days);
 
+            com.empresa.ecommerce_backend.enums.ProductType typeEnum = null;
+            if (params.getProductType() != null) {
+                try {
+                    typeEnum = com.empresa.ecommerce_backend.enums.ProductType.valueOf(params.getProductType());
+                } catch (IllegalArgumentException ignored) {}
+            }
+
             page = productRepository.findBestSellingSince(
                     since,
                     params.getCategoryId(),
                     params.getBrandId(),
+                    typeEnum,
                     q,
                     Boolean.TRUE.equals(params.getInStockOnly()),
                     pageable);
@@ -118,6 +142,13 @@ public class ProductServiceImpl implements ProductService {
                 parts.add(ProductSpecs.hasCategory(params.getCategoryId()));
             if (params.getBrandId() != null)
                 parts.add(ProductSpecs.hasBrand(params.getBrandId()));
+            if (params.getConsoleId() != null)
+                parts.add(ProductSpecs.hasConsole(params.getConsoleId()));
+            if (params.getProductType() != null) {
+                try {
+                    parts.add(ProductSpecs.hasProductType(com.empresa.ecommerce_backend.enums.ProductType.valueOf(params.getProductType())));
+                } catch (IllegalArgumentException ignored) {}
+            }
             if (q != null)
                 parts.add(ProductSpecs.nameContains(params.getQ()));
             if (params.getMinPrice() != null || params.getMaxPrice() != null)
@@ -128,13 +159,15 @@ public class ProductServiceImpl implements ProductService {
                 parts.add(ProductSpecs.sizesIn(params.getSizes()));
             if (params.getTags() != null && !params.getTags().isEmpty())
                 parts.add(ProductSpecs.tagsIn(params.getTags()));
+            if (Boolean.TRUE.equals(params.getExcludeDLC()))
+                parts.add(ProductSpecs.isNotProductType(com.empresa.ecommerce_backend.enums.ProductType.DLC));
 
             Specification<Product> spec = parts.isEmpty() ? Specification.allOf() : Specification.allOf(parts);
             page = productRepository.findAll(spec, pageable);
         }
 
         Page<ProductResponse> mapped = page.map(p -> {
-            var response = productMapper.toResponse(p);
+            var response = productMapper.toResponse(p, getActiveBroadDiscounts(p.getProductType()), getTransferDiscount());
             enrichWithReviewStats(response, p.getId());
             return response;
         });
@@ -156,11 +189,13 @@ public class ProductServiceImpl implements ProductService {
 
         var categoryFacets = categoryRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
         var brandFacets = brandRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
+        var consoleFacets = consoleRepository.findFacetsWithCounts(namePattern, inStockOnly, minPrice, maxPrice);
         var pr = productRepository.findPriceRange(namePattern, inStockOnly, minPrice, maxPrice);
 
         var dto = new ProductFacetsResponse();
         dto.setCategoryFacets(categoryFacets);
         dto.setBrandFacets(brandFacets);
+        dto.setConsoleFacets(consoleFacets);
         dto.setPriceRange(new PriceRangeResponse(
                 (pr != null) ? pr.getMinPrice() : null,
                 (pr != null) ? pr.getMaxPrice() : null));
@@ -240,6 +275,8 @@ public class ProductServiceImpl implements ProductService {
             // Category y Brand (nombres, no IDs)
             dto.setCategoryName(p.getCategory() != null ? p.getCategory().getName() : null);
             dto.setBrandName(p.getBrand() != null ? p.getBrand().getName() : null);
+            dto.setConsoleName(p.getConsole() != null ? p.getConsole().getName() : null);
+            dto.setProductType(p.getProductType() != null ? p.getProductType().name() : null);
 
             // Precio representativo (más barato)
             BigDecimal price = null;
@@ -293,6 +330,8 @@ public class ProductServiceImpl implements ProductService {
         product.setName(request.getName());
         product.setDescription(request.getDescription());
         product.setSku(request.getSku());
+        product.setIsPresale(request.getIsPresale());
+        product.setReleaseDate(request.getReleaseDate());
 
         // Actualizar categoría si viene
         if (request.getCategoryId() != null) {
@@ -312,8 +351,46 @@ public class ProductServiceImpl implements ProductService {
             product.setBrand(null);
         }
 
+        // Actualizar consola si viene
+        if (request.getConsoleId() != null) {
+            com.empresa.ecommerce_backend.model.Console console = consoleRepository.findById(request.getConsoleId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Consola no encontrada"));
+            product.setConsole(console);
+        } else {
+            product.setConsole(null);
+        }
+
+        // Actualizar tipo
+        if (request.getProductType() != null) {
+            try {
+                product.setProductType(com.empresa.ecommerce_backend.enums.ProductType.valueOf(request.getProductType()));
+            } catch (IllegalArgumentException ignored) {}
+        }
+
+        // Actualizar juego padre (para DLCs) - opcional
+        if (request.getParentGameId() != null) {
+            Product parentGame = productRepository.findById(request.getParentGameId())
+                    .orElseThrow(() -> new RecursoNoEncontradoException("Juego padre no encontrado"));
+            product.setParentGame(parentGame);
+        } else {
+            product.setParentGame(null);
+        }
+
+        product.setSpecificationsJson(request.getSpecificationsJson());
+
+        // Actualizar descuentos individuales
+        if (request.getDiscountIds() != null) {
+            var discounts = new java.util.HashSet<com.empresa.ecommerce_backend.model.Discount>();
+            for (Long dId : request.getDiscountIds()) {
+                discountRepository.findById(dId).ifPresent(discounts::add);
+            }
+            product.setDiscounts(discounts);
+        } else {
+            product.getDiscounts().clear();
+        }
+
         Product saved = productRepository.save(product);
-        return ServiceResult.ok(productMapper.toResponse(saved));
+        return ServiceResult.ok(productMapper.toResponse(saved, getActiveBroadDiscounts(saved.getProductType()), getTransferDiscount()));
     }
 
     @Override
@@ -329,7 +406,25 @@ public class ProductServiceImpl implements ProductService {
         response.setSku(product.getSku());
         response.setBrandId(product.getBrand() != null ? product.getBrand().getId() : null);
         response.setCategoryId(product.getCategory() != null ? product.getCategory().getId() : null);
+        response.setConsoleId(product.getConsole() != null ? product.getConsole().getId() : null);
+        response.setProductType(product.getProductType() != null ? product.getProductType().name() : null);
         response.setSoldCount(product.getSoldCount());
+
+        // Juego padre (si es DLC)
+        if (product.getParentGame() != null) {
+            response.setParentGameId(product.getParentGame().getId());
+            response.setParentGameName(product.getParentGame().getName());
+        }
+
+        response.setSpecificationsJson(product.getSpecificationsJson());
+
+        // IDs de descuentos individuales
+        if (product.getDiscounts() != null) {
+            response.setDiscountIds(product.getDiscounts().stream()
+                    .map(com.empresa.ecommerce_backend.model.Discount::getId)
+                    .toList());
+        }
+
 
         // Mapear imágenes del producto base (sin variante)
         List<ProductImageResponse> imageResponses = product.getImages().stream()
@@ -342,6 +437,8 @@ public class ProductServiceImpl implements ProductService {
                 ))
                 .toList();
         response.setImages(imageResponses);
+        response.setIsPresale(product.getIsPresale());
+        response.setReleaseDate(product.getReleaseDate());
 
         return ServiceResult.ok(response);
     }
@@ -382,5 +479,20 @@ public class ProductServiceImpl implements ProductService {
         }).toList();
 
         return ServiceResult.ok(dtos);
+    }
+
+    // ---------- Helpers para precios dinámicos ----------
+
+    private BigDecimal getTransferDiscount() {
+        return systemSettingRepository.findByKey(TRANSFER_KEY)
+                .map(s -> {
+                    try { return new BigDecimal(s.getValue()); }
+                    catch (Exception e) { return DEFAULT_TRANSFER; }
+                })
+                .orElse(DEFAULT_TRANSFER);
+    }
+
+    private List<com.empresa.ecommerce_backend.model.Discount> getActiveBroadDiscounts(com.empresa.ecommerce_backend.enums.ProductType type) {
+        return discountRepository.findActiveBroadDiscounts(LocalDateTime.now(), type);
     }
 }

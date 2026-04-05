@@ -21,25 +21,37 @@ public interface ProductMapper {
     @Mapping(target = "variants", ignore = true) // las variantes se gestionan aparte
     @Mapping(target = "brand", source = "brandId", qualifiedByName = "brandFromId")
     @Mapping(target = "category", source = "categoryId", qualifiedByName = "categoryFromId")
+    @Mapping(target = "console", source = "consoleId", qualifiedByName = "consoleFromId")
+    @Mapping(target = "parentGame", source = "parentGameId", qualifiedByName = "productFromId")
+    @Mapping(target = "dlcs", ignore = true)
     Product toEntity(ProductRequest dto);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "variants", ignore = true)
+    @Mapping(target = "dlcs", ignore = true)
     @Mapping(target = "brand", source = "brandId", qualifiedByName = "brandFromId")
     @Mapping(target = "category", source = "categoryId", qualifiedByName = "categoryFromId")
+    @Mapping(target = "console", source = "consoleId", qualifiedByName = "consoleFromId")
+    @Mapping(target = "parentGame", source = "parentGameId", qualifiedByName = "productFromId")
     void updateEntity(@MappingTarget Product entity, ProductRequest dto);
 
-    @Mapping(target = "title", source = "name")
+    @Mapping(target = "title", source = "product.name")
     @Mapping(target = "averageRating", ignore = true)
     @Mapping(target = "totalReviews", ignore = true)
     @Mapping(target = "price", expression = "java(computeRepresentativePrice(product))")
-    @Mapping(target = "discountedPrice", expression = "java(computeDiscountedPrice(product))")
-    @Mapping(target = "priceWithTransfer", expression = "java(computePriceWithTransfer(product))") // 👈 NUEVO
+    @Mapping(target = "discountedPrice", expression = "java(computeDiscountedPrice(product, globalDiscounts))")
+    @Mapping(target = "priceWithTransfer", expression = "java(computePriceWithTransfer(product, globalDiscounts, transferDiscountPct))")
     @Mapping(target = "imgs", expression = "java(buildImages(product))")
     @Mapping(target = "variantCount", expression = "java(product.getVariants() != null ? product.getVariants().size() : 0)")
     @Mapping(target = "defaultVariantId", expression = "java(getDefaultVariantId(product))")
-    @Mapping(target = "fulfillmentType", expression = "java(resolveFulfillmentType(product))") // 👈 NUEVO
-    ProductResponse toResponse(Product product);
+    @Mapping(target = "fulfillmentType", expression = "java(resolveFulfillmentType(product))")
+    @Mapping(target = "consoleName", source = "console.name")
+    ProductResponse toResponse(Product product, @Context List<Discount> globalDiscounts, @Context BigDecimal transferDiscountPct);
+
+    /** Overload for simple mapping without context */
+    default ProductResponse toResponse(Product product) {
+        return toResponse(product, null, null);
+    }
 
     List<ProductResponse> toResponseList(List<Product> products);
 
@@ -57,6 +69,22 @@ public interface ProductMapper {
         Category c = new Category();
         c.setId(id);
         return c;
+    }
+
+    @Named("consoleFromId")
+    default Console consoleFromId(Long id) {
+        if (id == null) return null;
+        Console c = new Console();
+        c.setId(id);
+        return c;
+    }
+
+    @Named("productFromId")
+    default Product productFromId(Long id) {
+        if (id == null) return null;
+        Product p = new Product();
+        p.setId(id);
+        return p;
     }
 
     // ---------- Helpers ----------
@@ -78,33 +106,52 @@ public interface ProductMapper {
                 .orElse(null);
     }
 
-    /** Calcula precio con descuento (si existen descuentos) */
-    default BigDecimal computeDiscountedPrice(Product p) {
+    /** Calcula precio con descuento (considerando específicos y globales) */
+    default BigDecimal computeDiscountedPrice(Product p, @Context List<Discount> globalDiscounts) {
         BigDecimal base = computeRepresentativePrice(p);
         if (base == null) return null;
 
-        if (p.getDiscounts() == null || p.getDiscounts().isEmpty()) return base;
-
         BigDecimal best = base;
-        for (Discount d : p.getDiscounts()) {
-            BigDecimal pct = d.getPercentage();
-            if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
-                BigDecimal off = base.multiply(pct)
-                        .divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-                BigDecimal candidate = base.subtract(off);
-                if (candidate.compareTo(best) < 0) best = candidate;
+
+        // 1. Evaluar descuentos específicos del producto
+        if (p.getDiscounts() != null) {
+            for (Discount d : p.getDiscounts()) {
+                best = applyIfBetter(base, best, d);
             }
         }
+
+        // 2. Evaluar descuentos globales (sitio o tipo de producto)
+        if (globalDiscounts != null) {
+            for (Discount d : globalDiscounts) {
+                best = applyIfBetter(base, best, d);
+            }
+        }
+
         return best.max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
     }
 
-    /** Calcula precio con transferencia (10% off sobre el precio con descuento) */
-    default BigDecimal computePriceWithTransfer(Product p) {
-        BigDecimal discounted = computeDiscountedPrice(p);
+    private BigDecimal applyIfBetter(BigDecimal base, BigDecimal currentBest, Discount d) {
+        BigDecimal pct = d.getPercentage();
+        if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal off = base.multiply(pct).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
+            BigDecimal candidate = base.subtract(off);
+            if (candidate.compareTo(currentBest) < 0) return candidate;
+        }
+        // TODO: implementar monto fijo aquí si es necesario
+        return currentBest;
+    }
+
+    /** Calcula precio con transferencia usando porcentaje dinámico */
+    default BigDecimal computePriceWithTransfer(Product p, @Context List<Discount> globalDiscounts, @Context BigDecimal transferDiscountPct) {
+        BigDecimal discounted = computeDiscountedPrice(p, globalDiscounts);
         if (discounted == null) return null;
-        // 10% de descuento adicional
-        BigDecimal transferDiscount = discounted.multiply(new BigDecimal("0.05"));
-        return discounted.subtract(transferDiscount).setScale(2, RoundingMode.HALF_UP);
+
+        if (transferDiscountPct == null || transferDiscountPct.compareTo(BigDecimal.ZERO) <= 0) {
+            return discounted;
+        }
+
+        BigDecimal off = discounted.multiply(transferDiscountPct).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
+        return discounted.subtract(off).setScale(2, RoundingMode.HALF_UP);
     }
 
     /** Construye DTO de imágenes (solo imágenes del producto, no de variantes) */

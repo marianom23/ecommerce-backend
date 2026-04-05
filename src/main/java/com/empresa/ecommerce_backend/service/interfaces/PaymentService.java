@@ -19,7 +19,7 @@ public interface PaymentService {
 
     ServiceResult<OrderResponse> cancelPayment(Long orderId, String triggeredBy, String note);
 
-    Order handleGatewayWebhook(String provider, Map<String, Object> payload);
+    Order handleGatewayWebhook(String provider, Map<String, Object> payload, Map<String, String> headers);
 
     int expireOverduePayments();
 }

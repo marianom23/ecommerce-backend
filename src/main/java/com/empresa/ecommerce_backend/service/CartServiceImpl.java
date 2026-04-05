@@ -308,7 +308,7 @@ public class CartServiceImpl implements CartService {
                 .orElseThrow(() -> new EntityNotFoundException("La variante indicada no existe para este producto"));
 
         BigDecimal listPrice = variant.getPrice();
-        BigDecimal discounted = listPrice;
+        BigDecimal discounted = cartMapper.computeDiscountedPriceForVariant(variant);
 
         Optional<CartItem> existing = cartItemRepository.findByCartAndProductAndVariant(cart, product, variant);
         CartItem item = existing.orElse(null);

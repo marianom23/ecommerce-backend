@@ -67,9 +67,10 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
           LEFT JOIN p.variants v
           LEFT JOIN OrderItem oi ON oi.variant = v
           LEFT JOIN oi.order o
-          WHERE (:categoryId IS NULL OR p.category.id = :categoryId)
-            AND (:brandId    IS NULL OR p.brand.id    = :brandId)
-            AND (:nameLike   IS NULL OR LOWER(p.name) LIKE LOWER(:nameLike))
+          WHERE (:categoryId  IS NULL OR p.category.id = :categoryId)
+            AND (:brandId     IS NULL OR p.brand.id    = :brandId)
+            AND (:productType IS NULL OR p.productType = :productType)
+            AND (:nameLike    IS NULL OR LOWER(p.name) LIKE LOWER(:nameLike))
             AND (:inStockOnly = FALSE OR EXISTS (
                    SELECT 1 FROM ProductVariant v2
                    WHERE v2.product = p
@@ -85,6 +86,7 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
       @Param("since") LocalDateTime since,
       @Param("categoryId") Long categoryId,
       @Param("brandId") Long brandId,
+      @Param("productType") com.empresa.ecommerce_backend.enums.ProductType productType,
       @Param("nameLike") String nameLike,
       @Param("inStockOnly") boolean inStockOnly,
       Pageable pageable);
@@ -105,6 +107,9 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
   @EntityGraph(attributePaths = { "discounts", "tags" })
   Optional<Product> findWithDiscountsAndTagsById(Long id);
 
-  @Query("SELECT DISTINCT p FROM Product p JOIN p.variants v WHERE v.fulfillmentType IN (com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_ON_DEMAND, com.empresa.ecommerce_backend.enums.FulfillmentType.DIGITAL_INSTANT)")
+  @Query("SELECT DISTINCT p FROM Product p LEFT JOIN p.variants v WHERE p.productType = com.empresa.ecommerce_backend.enums.ProductType.GAME")
   List<Product> findDigitalProducts();
+
+  /** Retorna todos los DLCs asociados a un juego padre */
+  List<Product> findByParentGame_Id(Long parentGameId);
 }

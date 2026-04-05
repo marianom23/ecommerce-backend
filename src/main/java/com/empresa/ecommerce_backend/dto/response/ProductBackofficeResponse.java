@@ -15,6 +15,8 @@ public class ProductBackofficeResponse {
     private String thumbnail;           // Primera imagen del producto o variante
     private String categoryName;        // Nombre de la categoría
     private String brandName;           // Nombre de la marca
+    private String consoleName;         // Nombre de la consola
+    private String productType;         // Tipo de producto
     private BigDecimal price;           // Precio representativo (más barato)
     private Integer totalStock;         // Stock total de todas las variantes
     private Integer variantCount;       // Cantidad de variantes

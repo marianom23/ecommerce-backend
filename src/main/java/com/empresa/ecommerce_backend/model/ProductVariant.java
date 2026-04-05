@@ -34,6 +34,7 @@ public class ProductVariant {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "product_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonIgnore
     private Product product;
 
     @OneToMany(mappedBy = "variant", fetch = FetchType.LAZY,

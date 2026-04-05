@@ -12,7 +12,10 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 
 @Component
+@lombok.RequiredArgsConstructor
 public class CartCookieManager {
+    
+    private final org.springframework.core.env.Environment env;
 
     public static final String CART_COOKIE = "cart_session";
 
@@ -82,9 +85,6 @@ public class CartCookieManager {
     }
 
     private boolean isProd() {
-        String profile = System.getProperty("spring.profiles.active");
-        if (profile == null)
-            profile = System.getenv("SPRING_PROFILES_ACTIVE");
-        return "prod".equalsIgnoreCase(profile);
+        return env.acceptsProfiles(org.springframework.core.env.Profiles.of("prod", "qa"));
     }
 }

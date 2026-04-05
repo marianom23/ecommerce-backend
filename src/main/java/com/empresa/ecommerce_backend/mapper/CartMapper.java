@@ -9,10 +9,15 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
-@Mapper(componentModel = "spring")
-public interface CartMapper {
+import org.springframework.beans.factory.annotation.Autowired;
 
-    default CartResponse toResponse(Cart cart) {
+@Mapper(componentModel = "spring")
+public abstract class CartMapper {
+
+    @Autowired
+    protected com.empresa.ecommerce_backend.repository.DiscountRepository discountRepository;
+
+    public CartResponse toResponse(Cart cart) {
         List<CartItemResponse> items = cart.getItems().stream()
                 .map(this::toItemResponse)
                 .toList();
@@ -35,7 +40,7 @@ public interface CartMapper {
                 .build();
     }
 
-    default CartItemResponse toItemResponse(CartItem ci) {
+    public CartItemResponse toItemResponse(CartItem ci) {
         Product p = ci.getProduct();
         ProductVariant v = ci.getVariant();
 
@@ -45,7 +50,7 @@ public interface CartMapper {
         }
 
         BigDecimal unitPrice = v.getPrice(); // 👈 siempre desde la variante
-        BigDecimal unitDiscounted = unitPrice; // luego aplicar descuentos si corresponde
+        BigDecimal unitDiscounted = computeDiscountedPriceForVariant(v); 
         BigDecimal qty = BigDecimal.valueOf(ci.getQuantity());
         BigDecimal subtotal = unitDiscounted.multiply(qty);
 
@@ -66,13 +71,48 @@ public interface CartMapper {
     }
 
 
+    public BigDecimal computeDiscountedPriceForVariant(ProductVariant v) {
+        if (v == null || v.getPrice() == null) return BigDecimal.ZERO;
+        
+        Product p = v.getProduct();
+        List<com.empresa.ecommerce_backend.model.Discount> globalDiscounts = 
+            discountRepository.findActiveBroadDiscounts(java.time.LocalDateTime.now(), p.getProductType());
+            
+        BigDecimal base = v.getPrice();
+        BigDecimal best = base;
+
+        if (p.getDiscounts() != null) {
+            for (com.empresa.ecommerce_backend.model.Discount d : p.getDiscounts()) {
+                best = applyIfBetter(base, best, d);
+            }
+        }
+
+        if (globalDiscounts != null) {
+            for (com.empresa.ecommerce_backend.model.Discount d : globalDiscounts) {
+                best = applyIfBetter(base, best, d);
+            }
+        }
+
+        return best.max(BigDecimal.ZERO).setScale(2, java.math.RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal applyIfBetter(BigDecimal base, BigDecimal currentBest, com.empresa.ecommerce_backend.model.Discount d) {
+        BigDecimal pct = d.getPercentage();
+        if (pct != null && pct.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal off = base.multiply(pct).divide(BigDecimal.valueOf(100), 4, java.math.RoundingMode.HALF_UP);
+            BigDecimal candidate = base.subtract(off);
+            if (candidate.compareTo(currentBest) < 0) return candidate;
+        }
+        return currentBest;
+    }
+
     /**
      * Devuelve la URL principal de imagen para la línea del carrito:
      * - Si la variante tiene imágenes, toma la primera por "position".
      * - Si no, toma la primera imagen "general" del producto (variant == null).
      * - Si no hay ninguna, retorna null (o usa un placeholder si querés).
      */
-    default String resolvePrimaryImageUrl(Product p, ProductVariant v) {
+    protected String resolvePrimaryImageUrl(Product p, ProductVariant v) {
         // 1) imágenes específicas de la variante
         if (v != null && v.getImages() != null && !v.getImages().isEmpty()) {
             return v.getImages().stream()

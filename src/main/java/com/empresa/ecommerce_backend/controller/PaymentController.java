@@ -47,14 +47,4 @@ public class PaymentController {
         return paymentService.cancelPayment(orderId, who, note);
     }
 
-    // Webhook Mercado Pago (sin ServiceResult; solo 200/OK)
-    @PostMapping("/webhook/mercadopago")
-    public String mpWebhook(
-            @RequestBody Map<String, Object> payload,
-            @RequestHeader Map<String, String> headers) {
-        // TODO: validar firma
-        paymentService.handleGatewayWebhook("MERCADO_PAGO", payload);
-        return "ok";
-    }
-
 }
