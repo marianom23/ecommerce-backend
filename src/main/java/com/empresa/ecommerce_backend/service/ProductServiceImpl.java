@@ -87,9 +87,61 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
+    public ServiceResult<List<ProductResponse>> getFeaturedProducts() {
+        return systemSettingRepository.findByKey("HOME_FEATURED_IDS")
+                .map(setting -> {
+                    String value = setting.getValue();
+                    if (value == null || value.isBlank()) {
+                        return ServiceResult.ok((List<ProductResponse>) new ArrayList<ProductResponse>());
+                    }
+
+                    List<Long> ids;
+                    try {
+                        ids = java.util.Arrays.stream(value.split(","))
+                                .map(String::trim)
+                                .filter(s -> !s.isEmpty())
+                                .map(Long::valueOf)
+                                .toList();
+                    } catch (NumberFormatException e) {
+                        return ServiceResult.ok((List<ProductResponse>) new ArrayList<ProductResponse>());
+                    }
+
+                    if (ids.isEmpty()) {
+                        return ServiceResult.ok((List<ProductResponse>) new ArrayList<ProductResponse>());
+                    }
+
+                    // Buscamos todos los productos por sus IDs
+                    List<Product> products = productRepository.findAllById(ids);
+
+                    // Los ordenamos según el orden exacto de los IDs proporcionados
+                    List<ProductResponse> sortedResponses = ids.stream()
+                            .map(id -> products.stream()
+                                    .filter(p -> p.getId().equals(id))
+                                    .findFirst()
+                                    .orElse(null))
+                            .filter(java.util.Objects::nonNull)
+                            .filter(p -> Boolean.TRUE.equals(p.getIsVisible()))
+                            .map(p -> {
+                                var response = productMapper.toResponse(p, getActiveBroadDiscounts(p.getProductType()), getTransferDiscount());
+                                enrichWithReviewStats(response, p.getId());
+                                return response;
+                            })
+                            .toList();
+
+                    return ServiceResult.ok(sortedResponses);
+                })
+                .orElse(ServiceResult.ok((List<ProductResponse>) new ArrayList<ProductResponse>()));
+    }
+
+    @Override
     public ServiceResult<ProductResponse> getProductById(Long id) {
         var product = productRepository.findById(id)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
+
+        if (Boolean.FALSE.equals(product.getIsVisible())) {
+            throw new RecursoNoEncontradoException("Producto no encontrado");
+        }
+
         var response = productMapper.toResponse(product, getActiveBroadDiscounts(product.getProductType()), getTransferDiscount());
         enrichWithReviewStats(response, id);
         return ServiceResult.ok(response);
@@ -161,6 +213,11 @@ public class ProductServiceImpl implements ProductService {
                 parts.add(ProductSpecs.tagsIn(params.getTags()));
             if (Boolean.TRUE.equals(params.getExcludeDLC()))
                 parts.add(ProductSpecs.isNotProductType(com.empresa.ecommerce_backend.enums.ProductType.DLC));
+            if (params.getIsPresale() != null)
+                parts.add(ProductSpecs.isPresale(params.getIsPresale()));
+            
+            // Siempre filtrar productos visibles en la tienda pública
+            parts.add(ProductSpecs.isVisible(true));
 
             Specification<Product> spec = parts.isEmpty() ? Specification.allOf() : Specification.allOf(parts);
             page = productRepository.findAll(spec, pageable);
@@ -207,7 +264,7 @@ public class ProductServiceImpl implements ProductService {
         if (sortKey == null)
             sortKey = "latest";
         return switch (sortKey) {
-            case "latest" -> Sort.by(Sort.Direction.DESC, "id");
+            case "latest" -> Sort.by(Sort.Direction.DESC, "isPresale").and(Sort.by(Sort.Direction.DESC, "id"));
             case "bestSelling" -> Sort.by(Sort.Direction.DESC, "soldCount").and(Sort.by(Sort.Direction.DESC, "id"));
             case "id" -> Sort.by(Sort.Direction.ASC, "id");
             default -> Sort.by(Sort.Direction.DESC, "id");
@@ -313,6 +370,7 @@ public class ProductServiceImpl implements ProductService {
 
             // Cantidad de variantes
             dto.setVariantCount(p.getVariants() != null ? p.getVariants().size() : 0);
+            dto.setIsVisible(p.getIsVisible());
 
             return dto;
         });
@@ -332,6 +390,9 @@ public class ProductServiceImpl implements ProductService {
         product.setSku(request.getSku());
         product.setIsPresale(request.getIsPresale());
         product.setReleaseDate(request.getReleaseDate());
+        if (request.getIsVisible() != null) {
+            product.setIsVisible(request.getIsVisible());
+        }
 
         // Actualizar categoría si viene
         if (request.getCategoryId() != null) {
@@ -439,6 +500,7 @@ public class ProductServiceImpl implements ProductService {
         response.setImages(imageResponses);
         response.setIsPresale(product.getIsPresale());
         response.setReleaseDate(product.getReleaseDate());
+        response.setIsVisible(product.getIsVisible());
 
         return ServiceResult.ok(response);
     }
@@ -490,6 +552,27 @@ public class ProductServiceImpl implements ProductService {
                     catch (Exception e) { return DEFAULT_TRANSFER; }
                 })
                 .orElse(DEFAULT_TRANSFER);
+    }
+
+    @Override
+    @Transactional
+    public ServiceResult<Void> updateFeaturedProducts(List<Long> ids) {
+        String value = ids.stream()
+                .map(String::valueOf)
+                .collect(java.util.stream.Collectors.joining(","));
+
+        var setting = systemSettingRepository.findByKey("HOME_FEATURED_IDS")
+                .orElseGet(() -> {
+                    var s = new com.empresa.ecommerce_backend.model.SystemSetting();
+                    s.setKey("HOME_FEATURED_IDS");
+                    s.setType("STRING");
+                    s.setDescription("IDs de productos destacados en la Home (separados por coma)");
+                    return s;
+                });
+
+        setting.setValue(value);
+        systemSettingRepository.save(setting);
+        return ServiceResult.ok(null);
     }
 
     private List<com.empresa.ecommerce_backend.model.Discount> getActiveBroadDiscounts(com.empresa.ecommerce_backend.enums.ProductType type) {

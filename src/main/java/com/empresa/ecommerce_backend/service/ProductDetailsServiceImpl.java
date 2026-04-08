@@ -36,6 +36,10 @@ public class ProductDetailsServiceImpl implements ProductDetailsService {
         Product product = productRepository.findWithDetailsById(productId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Producto no encontrado"));
 
+        if (Boolean.FALSE.equals(product.getIsVisible())) {
+            throw new RecursoNoEncontradoException("Producto no encontrado");
+        }
+
         List<ProductVariant> variants =
                 productVariantRepository.findAllByProductIdOrderByIdAsc(productId);
 
@@ -63,7 +67,7 @@ public class ProductDetailsServiceImpl implements ProductDetailsService {
             List<ProductDetailsResponse.DlcSummaryDto> dlcSummaries = dlcProducts.stream().map(dlc -> {
                 ProductDetailsResponse.DlcSummaryDto s = new ProductDetailsResponse.DlcSummaryDto();
                 s.setId(dlc.getId());
-                s.setName(dlc.getName());
+                s.setTitle(dlc.getName());
 
                 // Precio mínimo del DLC
                 if (dlc.getVariants() != null && !dlc.getVariants().isEmpty()) {

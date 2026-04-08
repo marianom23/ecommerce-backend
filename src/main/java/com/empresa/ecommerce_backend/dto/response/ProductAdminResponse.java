@@ -32,4 +32,5 @@ public class ProductAdminResponse {
 
     private Boolean isPresale;
     private java.time.LocalDateTime releaseDate;
+    private Boolean isVisible;
 }

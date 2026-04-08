@@ -112,4 +112,7 @@ public class Product {
 
     @Column(name = "release_date")
     private LocalDateTime releaseDate;
+
+    @Column(name = "is_visible", nullable = false)
+    private Boolean isVisible = true;
 }

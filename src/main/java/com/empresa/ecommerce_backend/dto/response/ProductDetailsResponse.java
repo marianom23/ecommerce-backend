@@ -86,7 +86,7 @@ public class ProductDetailsResponse {
     @Data
     public static class DlcSummaryDto {
         private Long id;
-        private String name;
+        private String title;
         private BigDecimal price;
         private String imageUrl;
     }

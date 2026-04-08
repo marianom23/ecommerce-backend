@@ -44,4 +44,7 @@ public class ProductPaginatedRequest {
 
     // tags de producto
     private List<String> tags;
+
+    // pre-venta
+    private Boolean isPresale;
 }

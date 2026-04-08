@@ -95,6 +95,8 @@ public interface ProductRepository extends BaseRepository<Product, Long>, JpaSpe
 
   boolean existsBySku(String sku);
 
+  List<Product> findByTags_NameAndIsVisibleTrue(String tagName);
+
   List<Product> findByCategory_Id(Long categoryId);
 
   List<Product> findByBrand_Id(Long brandId);

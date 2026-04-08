@@ -63,7 +63,7 @@ public interface ProductDetailsMapper {
                 .map(d -> {
                     ProductDetailsResponse.DlcSummaryDto dto = new ProductDetailsResponse.DlcSummaryDto();
                     dto.setId(d.getId());
-                    dto.setName(d.getName());
+                    dto.setTitle(d.getName());
                     // El precio del DLC es el precio mínimo de sus variantes
                     dto.setPrice(minVariantPrice(new ArrayList<>(d.getVariants())));
                     // Imagen: primera imagen del DLC
