@@ -107,4 +107,14 @@ public class ProductSpecs {
             return in;
         };
     }
+
+    public static Specification<Product> isPresale(Boolean flag) {
+        if (flag == null) return null;
+        return (root, query, cb) -> cb.equal(root.get("isPresale"), flag);
+    }
+
+    public static Specification<Product> isVisible(Boolean flag) {
+        if (flag == null) return null;
+        return (root, query, cb) -> cb.equal(root.get("isVisible"), flag);
+    }
 }

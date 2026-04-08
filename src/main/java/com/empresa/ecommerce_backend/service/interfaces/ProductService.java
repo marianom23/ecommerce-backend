@@ -12,6 +12,8 @@ public interface ProductService {
 
     ServiceResult<List<ProductResponse>> getAllProducts();
 
+    ServiceResult<List<ProductResponse>> getFeaturedProducts();
+
     ServiceResult<ProductResponse> getProductById(Long id);
 
     ServiceResult<PaginatedResponse<ProductResponse>> getAllProductsPaged(ProductPaginatedRequest params);
@@ -26,4 +28,5 @@ public interface ProductService {
     ServiceResult<ProductAdminResponse> getProductForAdmin(Long id);
 
     ServiceResult<List<DigitalProductDTO>> getDigitalProducts();
+    ServiceResult<Void> updateFeaturedProducts(List<Long> ids);
 }

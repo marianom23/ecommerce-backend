@@ -73,4 +73,15 @@ public class ProductController {
     public ServiceResult<List<DigitalProductDTO>> getDigitalProducts() {
         return productService.getDigitalProducts();
     }
+
+    @GetMapping("/featured")
+    public ServiceResult<List<ProductResponse>> getFeaturedProducts() {
+        return productService.getFeaturedProducts();
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @PutMapping("/featured")
+    public ServiceResult<Void> updateFeaturedProducts(@RequestBody List<Long> ids) {
+        return productService.updateFeaturedProducts(ids);
+    }
 }

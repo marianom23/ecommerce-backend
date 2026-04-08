@@ -20,4 +20,5 @@ public class ProductBackofficeResponse {
     private BigDecimal price;           // Precio representativo (más barato)
     private Integer totalStock;         // Stock total de todas las variantes
     private Integer variantCount;       // Cantidad de variantes
+    private Boolean isVisible;
 }
