@@ -57,7 +57,9 @@ public class CatalogServiceImpl implements CatalogService {
         writer.write(",");
         
         // 4. availability (in stock; out of stock)
-        writer.write(variant.getStock() != null && variant.getStock() > 0 ? "in stock" : "out of stock");
+        boolean inStock = (variant.getStock() != null && variant.getStock() > 0) ||
+                         (variant.getFulfillmentType() != null && variant.getFulfillmentType().name().startsWith("DIGITAL"));
+        writer.write(inStock ? "in stock" : "out of stock");
         writer.write(",");
         
         // 5. condition (new; used)
