@@ -1,6 +1,5 @@
 package com.empresa.ecommerce_backend.service;
 
-import com.empresa.ecommerce_backend.dto.response.ServiceResult;
 import com.empresa.ecommerce_backend.model.Product;
 import com.empresa.ecommerce_backend.model.ProductImage;
 import com.empresa.ecommerce_backend.model.ProductVariant;
@@ -11,6 +10,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.io.Writer;
 import java.util.Comparator;
 import java.util.List;
 
@@ -25,50 +26,59 @@ public class CatalogServiceImpl implements CatalogService {
 
     @Override
     @Transactional(readOnly = true)
-    public ServiceResult<String> generateFacebookCatalogCsv() {
+    public void writeFacebookCatalogCsv(Writer writer) throws IOException {
         List<Product> products = productRepository.findAll();
         
-        StringBuilder csv = new StringBuilder();
         // Headers requested by USER
-        csv.append("id,title,description,availability,condition,price,link,image_link,brand,google_product_category,fb_product_category,quantity_to_sell_on_facebook,sale_price,sale_price_effective_date,item_group_id,gender,color,size,age_group,material,pattern,shipping,shipping_weight,video[0].url,video[0].tag[0],gtin,product_tags[0],product_tags[1],style[0]\n");
+        writer.write("id,title,description,availability,condition,price,link,image_link,brand,google_product_category,fb_product_category,quantity_to_sell_on_facebook,sale_price,sale_price_effective_date,item_group_id,gender,color,size,age_group,material,pattern,shipping,shipping_weight,video[0].url,video[0].tag[0],gtin,product_tags[0],product_tags[1],style[0]\n");
 
         for (Product product : products) {
             if (product.getIsVisible() == null || !product.getIsVisible()) continue;
             
             for (ProductVariant variant : product.getVariants()) {
-                appendRow(csv, product, variant);
-                csv.append("\n");
+                writeRow(writer, product, variant);
+                writer.write("\n");
             }
         }
-
-        return ServiceResult.ok(csv.toString());
+        writer.flush();
     }
 
-    private void appendRow(StringBuilder csv, Product product, ProductVariant variant) {
+    private void writeRow(Writer writer, Product product, ProductVariant variant) throws IOException {
         // 1. id (SKU del artículo)
-        csv.append(escapeCsv(variant.getSku())).append(",");
+        writer.write(escapeCsv(variant.getSku()));
+        writer.write(",");
         
         // 2. title
-        csv.append(escapeCsv(product.getName())).append(",");
+        writer.write(escapeCsv(product.getName()));
+        writer.write(",");
         
         // 3. description
-        csv.append(escapeCsv(product.getDescription())).append(",");
+        writer.write(escapeCsv(product.getDescription()));
+        writer.write(",");
         
         // 4. availability (in stock; out of stock)
-        csv.append(variant.getStock() != null && variant.getStock() > 0 ? "in stock" : "out of stock").append(",");
+        writer.write(variant.getStock() != null && variant.getStock() > 0 ? "in stock" : "out of stock");
+        writer.write(",");
         
         // 5. condition (new; used)
-        csv.append("new").append(",");
+        writer.write("new");
+        writer.write(",");
         
         // 6. price (Format: number followed by 3-letter currency code. Use period for decimal)
-        csv.append(variant.getPrice()).append(" USD,");
+        writer.write(String.valueOf(variant.getPrice()));
+        writer.write(" USD,");
         
-        // 7. link (URL de la página del producto)
+        // 7. link (URL de la página del producto corregida con slug)
         String baseUrl = frontBaseUrl;
         if (baseUrl.endsWith("/")) {
             baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
         }
-        csv.append(baseUrl).append("/product/").append(product.getId()).append(",");
+        writer.write(baseUrl);
+        writer.write("/detalle-producto/");
+        writer.write(String.valueOf(product.getId()));
+        writer.write("-");
+        writer.write(toSlug(product.getName()));
+        writer.write(",");
         
         // 8. image_link
         String imageUrl = product.getImages().stream()
@@ -81,75 +91,105 @@ public class CatalogServiceImpl implements CatalogService {
             // Prepend Cloudinary base (using cloud name found in frontend config)
             imageUrl = "https://res.cloudinary.com/ddyk5hlit/image/upload/" + imageUrl;
         }
-        csv.append(escapeCsv(imageUrl)).append(",");
+        writer.write(escapeCsv(imageUrl));
+        writer.write(",");
         
         // 9. brand
-        csv.append(escapeCsv(product.getBrand() != null ? product.getBrand().getName() : "Generic")).append(",");
+        writer.write(escapeCsv(product.getBrand() != null ? product.getBrand().getName() : "Generic"));
+        writer.write(",");
         
         // 10. google_product_category
-        csv.append(escapeCsv(product.getCategory() != null ? product.getCategory().getName() : "")).append(",");
+        writer.write(escapeCsv(product.getCategory() != null ? product.getCategory().getName() : ""));
+        writer.write(",");
         
         // 11. fb_product_category
-        csv.append(escapeCsv(product.getCategory() != null ? product.getCategory().getName() : "")).append(",");
+        writer.write(escapeCsv(product.getCategory() != null ? product.getCategory().getName() : ""));
+        writer.write(",");
         
         // 12. quantity_to_sell_on_facebook
-        csv.append(variant.getStock() != null ? variant.getStock() : 0).append(",");
+        writer.write(String.valueOf(variant.getStock() != null ? variant.getStock() : 0));
+        writer.write(",");
         
         // 13. sale_price (TODO: Logic for discounts if needed)
-        csv.append(",");
+        writer.write(",");
         
         // 14. sale_price_effective_date
-        csv.append(",");
+        writer.write(",");
         
         // 15. item_group_id
-        csv.append(escapeCsv(product.getSku() != null ? product.getSku() : String.valueOf(product.getId()))).append(",");
+        writer.write(escapeCsv(product.getSku() != null ? product.getSku() : String.valueOf(product.getId())));
+        writer.write(",");
         
         // 16. gender (female; male; unisex)
-        csv.append("unisex").append(",");
+        writer.write("unisex");
+        writer.write(",");
         
         // 17. color
-        csv.append(",");
+        writer.write(",");
         
         // 18. size
-        csv.append(",");
+        writer.write(",");
         
         // 19. age_group (adult; all ages; infant; kids; newborn; teen; toddler)
-        csv.append("adult").append(",");
+        writer.write("adult");
+        writer.write(",");
         
         // 20. material
-        csv.append(",");
+        writer.write(",");
         
         // 21. pattern
-        csv.append(",");
+        writer.write(",");
         
         // 22. shipping
-        csv.append(",");
+        writer.write(",");
         
         // 23. shipping_weight
-        csv.append(variant.getWeightKg() != null ? variant.getWeightKg() + " kg" : "").append(",");
+        writer.write(variant.getWeightKg() != null ? variant.getWeightKg() + " kg" : "");
+        writer.write(",");
         
         // 24. video[0].url
-        csv.append(",");
+        writer.write(",");
         
         // 25. video[0].tag[0]
-        csv.append(",");
+        writer.write(",");
         
         // 26. gtin
-        csv.append(",");
+        writer.write(",");
         
         // 27. product_tags[0]
-        csv.append(",");
+        writer.write(",");
         
         // 28. product_tags[1]
-        csv.append(",");
+        writer.write(",");
         
         // 29. style[0]
-        csv.append("");
+        writer.write("");
+    }
+
+    private String toSlug(String input) {
+        if (input == null) return "";
+        String normalized = java.text.Normalizer.normalize(input, java.text.Normalizer.Form.NFD);
+        return normalized.toLowerCase()
+                .replaceAll("[\\p{InCombiningDiacriticalMarks}]", "")
+                .replaceAll("[^a-z0-9\\s-]", "")
+                .replaceAll("\\s+", "-")
+                .replaceAll("-+", "-")
+                .replaceAll("^-", "")
+                .replaceAll("-$", "");
     }
 
     private String escapeCsv(String value) {
         if (value == null) return "";
-        String clean = value.replace("\n", " ").replace("\r", " ");
+        // Clean multi-lines and tabs
+        String clean = value.replace("\n", " ")
+                            .replace("\r", " ")
+                            .replace("\t", " ");
+        
+        // Limit to reasonable length (FB limit is 9999)
+        if (clean.length() > 5000) {
+            clean = clean.substring(0, 4997) + "...";
+        }
+
         if (clean.contains(",") || clean.contains("\"")) {
             return "\"" + clean.replace("\"", "\"\"") + "\"";
         }
