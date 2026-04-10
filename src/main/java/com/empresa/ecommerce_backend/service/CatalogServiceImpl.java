@@ -64,7 +64,11 @@ public class CatalogServiceImpl implements CatalogService {
         csv.append(variant.getPrice()).append(" USD,");
         
         // 7. link (URL de la página del producto)
-        csv.append(frontBaseUrl).append("/product/").append(product.getId()).append(",");
+        String baseUrl = frontBaseUrl;
+        if (baseUrl.endsWith("/")) {
+            baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
+        }
+        csv.append(baseUrl).append("/product/").append(product.getId()).append(",");
         
         // 8. image_link
         String imageUrl = product.getImages().stream()
@@ -72,6 +76,11 @@ public class CatalogServiceImpl implements CatalogService {
                 .map(ProductImage::getUrl)
                 .findFirst()
                 .orElse("");
+
+        if (imageUrl != null && !imageUrl.isEmpty() && !imageUrl.startsWith("http")) {
+            // Prepend Cloudinary base (using cloud name found in frontend config)
+            imageUrl = "https://res.cloudinary.com/ddyk5hlit/image/upload/" + imageUrl;
+        }
         csv.append(escapeCsv(imageUrl)).append(",");
         
         // 9. brand
