@@ -567,6 +567,12 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
+        // Auto-transición para órdenes digitales: SHIPPED -> DELIVERED
+        // Si no requiere envío físico, el "envío" es la entrega misma.
+        if (newStatus == OrderStatus.SHIPPED && !requiresShipping(o)) {
+            newStatus = OrderStatus.DELIVERED;
+        }
+
         o.setStatus(newStatus);
         Order saved = orderRepo.save(o);
         return ServiceResult.ok(orderMapper.toResponse(saved));
@@ -706,6 +712,12 @@ public class OrderServiceImpl implements OrderService {
                             "Solo se puede marcar como DELIVERED una orden física que esté SHIPPED.");
                 }
             }
+        }
+
+        // Auto-transición para órdenes digitales: SHIPPED -> DELIVERED
+        // Si no requiere envío físico, el "envío" es la entrega misma.
+        if (newStatus == OrderStatus.SHIPPED && !requiresShipping(o)) {
+            newStatus = OrderStatus.DELIVERED;
         }
 
         o.setStatus(newStatus);
