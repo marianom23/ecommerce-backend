@@ -49,6 +49,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final OrderMapper orderMapper;
     private final ProductRepository productRepo;
     private final com.empresa.ecommerce_backend.service.interfaces.EmailService emailService;
+    private final org.springframework.core.env.Environment env;
 
     @Value("${mp.access-token}")
     private String mpAccessToken;
@@ -124,13 +125,17 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public Order handleGatewayWebhook(String provider, Map<String, Object> payload, Map<String, String> headers) {
-        // Validación de firma webhook de Mercado Pago
-        if ("MERCADO_PAGO".equals(provider) && mpWebhookSecret != null && !mpWebhookSecret.isBlank()) {
+        boolean isQa = env.acceptsProfiles(org.springframework.core.env.Profiles.of("qa"));
+
+        // Validación de firma webhook de Mercado Pago (se saltea en QA)
+        if (!isQa && "MERCADO_PAGO".equals(provider) && mpWebhookSecret != null && !mpWebhookSecret.isBlank()) {
             boolean isValid = validateMercadoPagoSignature(payload, headers);
             if (!isValid) {
                 System.err.println("❌ Firma MP inválida. Rechazando webhook.");
                 return null;
             }
+        } else if (isQa && "MERCADO_PAGO".equals(provider)) {
+            System.out.println("⚠️ Ambiente QA detectado: Se omite validación de firma de Mercado Pago.");
         }
 
         // 1) sacar payment_id del payload (body o query merged por el controller)
