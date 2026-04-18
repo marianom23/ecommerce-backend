@@ -15,7 +15,7 @@ import java.util.Map;
 public class MercadoPagoWebhookController {
     private final PaymentService paymentService;
 
-    @PostMapping({"/mercadopago", "/payments/webhook/mercadopago"})
+    @PostMapping("/mercadopago")
     public ResponseEntity<String> handle(@RequestBody(required = false) Map<String,Object> body,
                                          @RequestParam(required = false) Map<String,String> query,
                                          @RequestHeader Map<String,String> headers) {
