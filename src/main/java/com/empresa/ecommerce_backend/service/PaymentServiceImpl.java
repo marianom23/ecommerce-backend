@@ -204,8 +204,9 @@ public class PaymentServiceImpl implements PaymentService {
                     o.setStatus(OrderStatus.PAID);
                     orderRepo.save(o);
 
-                    // 📧 Notificar pago aprobado
+                    // 📧 Notificar pago aprobado (Usuario + Admin)
                     emailService.sendPaymentApprovedNotification(o.getId());
+                    emailService.sendPaymentApprovedAdminNotification(o.getId());
 
                     // 📊 EVENTO PURCHASE (Meta)
                     // Usar datos guardados en Payment p para "impersonar" al usuario original
@@ -301,8 +302,9 @@ public class PaymentServiceImpl implements PaymentService {
             }
             o.setStatus(OrderStatus.PAID);
 
-            // 📧 Notificar pago aprobado
+            // 📧 Notificar pago aprobado (Usuario + Admin)
             emailService.sendPaymentApprovedNotification(o.getId());
+            emailService.sendPaymentApprovedAdminNotification(o.getId());
 
             // 📊 EVENTO PURCHASE (Meta)
             String userIp = (p.getClientIp() != null) ? p.getClientIp() : "0.0.0.0";

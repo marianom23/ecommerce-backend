@@ -10,6 +10,8 @@ public interface EmailService {
 
     void sendPaymentApprovedNotification(Long orderId);
 
+    void sendPaymentApprovedAdminNotification(Long orderId);
+
     void sendPaymentExpiredNotification(Long orderId);
 
     void sendVerificationEmail(String to, String token);

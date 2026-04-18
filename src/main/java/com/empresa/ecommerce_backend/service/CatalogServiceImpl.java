@@ -68,7 +68,7 @@ public class CatalogServiceImpl implements CatalogService {
         
         // 6. price (Format: number followed by 3-letter currency code. Use period for decimal)
         writer.write(String.valueOf(variant.getPrice()));
-        writer.write(" USD,");
+        writer.write(" ARS,");
         
         // 7. link (URL de la página del producto corregida con slug)
         String baseUrl = frontBaseUrl;

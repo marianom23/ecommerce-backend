@@ -184,6 +184,20 @@ public class EmailServiceImpl implements EmailService {
                 "Hemos recibido tu pago correctamente. Pronto prepararemos tu pedido.");
         sendHtmlEmail(getOrderEmailSafe(order), subject, body);
     }
+    @Async("mailExecutor")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @Override
+    public void sendPaymentApprovedAdminNotification(Long orderId) {
+        Order order = orderRepo.findWithItemsById(orderId).orElse(null);
+        if (order == null) return;
+
+        String subject = "[ADMIN] Pago Aprobado - Orden #" + order.getOrderNumber();
+        String body = buildOrderHtml(order, "¡Nueva Venta Confirmada!",
+                "Se ha recibido y aprobado el pago para la orden #" + order.getOrderNumber() + 
+                ". El usuario es: " + getOrderEmailSafe(order));
+        
+        sendHtmlEmail(adminEmail, subject, body);
+    }
 
     @Async("mailExecutor")
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
