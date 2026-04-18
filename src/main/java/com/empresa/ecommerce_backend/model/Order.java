@@ -97,21 +97,21 @@ public class Order {
 
     @Embedded
     @AttributeOverrides({
-            @AttributeOverride(name = "fullName", column = @Column(name = "billing_full_name")),
-            @AttributeOverride(name = "documentType", column = @Column(name = "billing_document_type")),
-            @AttributeOverride(name = "documentNumber", column = @Column(name = "billing_document_number")),
-            @AttributeOverride(name = "taxCondition", column = @Column(name = "billing_tax_condition")),
-            @AttributeOverride(name = "businessName", column = @Column(name = "billing_business_name")),
-            @AttributeOverride(name = "emailForInvoices", column = @Column(name = "billing_email")),
-            @AttributeOverride(name = "phone", column = @Column(name = "billing_phone")),
-            @AttributeOverride(name = "street", column = @Column(name = "billing_street")),
-            @AttributeOverride(name = "streetNumber", column = @Column(name = "billing_street_number")),
-            @AttributeOverride(name = "city", column = @Column(name = "billing_city")),
-            @AttributeOverride(name = "state", column = @Column(name = "billing_state")),
-            @AttributeOverride(name = "postalCode", column = @Column(name = "billing_postal_code")),
-            @AttributeOverride(name = "country", column = @Column(name = "billing_country")),
-            @AttributeOverride(name = "apartmentNumber", column = @Column(name = "billing_apartment_number")),
-            @AttributeOverride(name = "floor", column = @Column(name = "billing_floor"))
+            @AttributeOverride(name = "fullName", column = @Column(name = "billing_full_name", nullable = true)),
+            @AttributeOverride(name = "documentType", column = @Column(name = "billing_document_type", nullable = true)),
+            @AttributeOverride(name = "documentNumber", column = @Column(name = "billing_document_number", nullable = true)),
+            @AttributeOverride(name = "taxCondition", column = @Column(name = "billing_tax_condition", nullable = true)),
+            @AttributeOverride(name = "businessName", column = @Column(name = "billing_business_name", nullable = true)),
+            @AttributeOverride(name = "emailForInvoices", column = @Column(name = "billing_email", nullable = true)),
+            @AttributeOverride(name = "phone", column = @Column(name = "billing_phone", nullable = true)),
+            @AttributeOverride(name = "street", column = @Column(name = "billing_street", nullable = true)),
+            @AttributeOverride(name = "streetNumber", column = @Column(name = "billing_street_number", nullable = true)),
+            @AttributeOverride(name = "city", column = @Column(name = "billing_city", nullable = true)),
+            @AttributeOverride(name = "state", column = @Column(name = "billing_state", nullable = true)),
+            @AttributeOverride(name = "postalCode", column = @Column(name = "billing_postal_code", nullable = true)),
+            @AttributeOverride(name = "country", column = @Column(name = "billing_country", nullable = true)),
+            @AttributeOverride(name = "apartmentNumber", column = @Column(name = "billing_apartment_number", nullable = true)),
+            @AttributeOverride(name = "floor", column = @Column(name = "billing_floor", nullable = true))
     })
     private BillingSnapshot billingInfo;
 
