@@ -544,11 +544,8 @@ public class OrderServiceImpl implements OrderService {
                 return ServiceResult.error(HttpStatus.BAD_REQUEST,
                         "Solo se puede marcar como SHIPPED una orden que esté PAID.");
             }
-            // No permitir SHIPPED si la orden es 100% digital
-            if (!requiresShipping(o)) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST,
-                        "No se puede marcar como SHIPPED una orden completamente digital.");
-            }
+            // Las órdenes digitales también pueden marcarse como SHIPPED
+            // ya que 'SHIPPED' puede representar el envío digital por email u otro medio.
         } else if (newStatus == OrderStatus.DELIVERED) {
             // Para marcar como DELIVERED:
             // - Si requiere envío físico: debe estar en SHIPPED
@@ -568,6 +565,12 @@ public class OrderServiceImpl implements OrderService {
                             "Solo se puede marcar como DELIVERED una orden física que esté SHIPPED.");
                 }
             }
+        }
+
+        // Auto-transición para órdenes digitales: SHIPPED -> DELIVERED
+        // Si no requiere envío físico, el "envío" es la entrega misma.
+        if (newStatus == OrderStatus.SHIPPED && !requiresShipping(o)) {
+            newStatus = OrderStatus.DELIVERED;
         }
 
         o.setStatus(newStatus);
@@ -688,11 +691,8 @@ public class OrderServiceImpl implements OrderService {
                 return ServiceResult.error(HttpStatus.BAD_REQUEST,
                         "Solo se puede marcar como SHIPPED una orden que esté PAID.");
             }
-            // No permitir SHIPPED si la orden es 100% digital
-            if (!requiresShipping(o)) {
-                return ServiceResult.error(HttpStatus.BAD_REQUEST,
-                        "No se puede marcar como SHIPPED una orden completamente digital.");
-            }
+            // Las órdenes digitales también pueden marcarse como SHIPPED
+            // ya que 'SHIPPED' puede representar el envío digital por email u otro medio.
         } else if (newStatus == OrderStatus.DELIVERED) {
             // Para marcar como DELIVERED:
             // - Si requiere envío físico: debe estar en SHIPPED
@@ -712,6 +712,12 @@ public class OrderServiceImpl implements OrderService {
                             "Solo se puede marcar como DELIVERED una orden física que esté SHIPPED.");
                 }
             }
+        }
+
+        // Auto-transición para órdenes digitales: SHIPPED -> DELIVERED
+        // Si no requiere envío físico, el "envío" es la entrega misma.
+        if (newStatus == OrderStatus.SHIPPED && !requiresShipping(o)) {
+            newStatus = OrderStatus.DELIVERED;
         }
 
         o.setStatus(newStatus);

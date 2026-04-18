@@ -60,20 +60,44 @@ public class EmailServiceImpl implements EmailService {
             return;
         }
 
-        // Lógica condicional según método de pago
-        if (order.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
-            // 1. Enviar instrucciones de transferencia al usuario
-            sendBankTransferInstructions(order);
+        // 1. Notificar al admin de nueva orden (SIEMPRE)
+        sendNewOrderAdminNotification(order);
 
-            // 2. Notificar al admin de nueva orden pendiente de transferencia
-            sendNewTransferOrderAdminNotification(order);
+        // 2. Lógica condicional para el usuario
+        if (order.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) {
+            // Enviar instrucciones de transferencia al usuario
+            sendBankTransferInstructions(order);
         } else {
-            // Para MercadoPago u otros, NO enviamos email de confirmación inicial.
-            // Se enviará solo cuando el pago sea APROBADO
-            // (sendPaymentApprovedNotification).
-            log.info("Orden #{} creada con {}. Esperando aprobación de pago para enviar email.",
+            // Para MercadoPago u otros, el usuario recibirá el mail cuando el pago sea APROBADO
+            log.info("Orden #{} creada con {}. Esperando aprobación de pago para enviar email al usuario.",
                     order.getOrderNumber(), order.getChosenPaymentMethod());
         }
+    }
+
+    private void sendNewOrderAdminNotification(Order order) {
+        String subject = "[ADMIN] Nueva Orden Recibida - #" + order.getOrderNumber();
+        String paymentDesc = (order.getChosenPaymentMethod() == PaymentMethod.BANK_TRANSFER) ? "Transferencia" : "Mercado Pago/Tarjeta";
+        
+        String body = String.format("""
+                    <html>
+                        <body style="font-family: Arial, sans-serif;">
+                            <h2 style="color: #2b3990;">Nueva Orden Recibida 🛍️</h2>
+                            <p>Se ha generado la orden <b>#%s</b>.</p>
+                            <p><b>Cliente:</b> %s</p>
+                            <p><b>Monto Total:</b> $%s</p>
+                            <p><b>Método de Pago:</b> %s</p>
+                            <p>Estado inicial: PENDIENTE</p>
+                            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;"/>
+                            <p><small>Este es un aviso automático de nueva orden iniciada en el sistema.</small></p>
+                        </body>
+                    </html>
+                """, 
+                order.getOrderNumber(), 
+                getOrderEmailSafe(order), 
+                order.getTotalAmount(),
+                paymentDesc);
+
+        sendHtmlEmail(adminEmail, subject, body);
     }
 
     private void sendBankTransferInstructions(Order order) {
@@ -126,20 +150,7 @@ public class EmailServiceImpl implements EmailService {
     }
 
     private void sendNewTransferOrderAdminNotification(Order order) {
-        String subject = "[ADMIN] Nueva Orden por Transferencia - #" + order.getOrderNumber();
-        String body = """
-                    <html>
-                        <body style="font-family: Arial, sans-serif;">
-                            <h2>Nueva Orden por Transferencia</h2>
-                            <p>El usuario <b>%s</b> ha iniciado la orden <b>#%s</b> seleccionando Transferencia Bancaria.</p>
-                            <p><b>Monto Total:</b> $%s</p>
-                            <p>Estado actual: PENDIENTE DE PAGO</p>
-                        </body>
-                    </html>
-                """
-                .formatted(getOrderEmailSafe(order), order.getOrderNumber(), order.getTotalAmount());
-
-        sendHtmlEmail(adminEmail, subject, body);
+        sendNewOrderAdminNotification(order);
     }
 
     @Async("mailExecutor")
@@ -183,6 +194,20 @@ public class EmailServiceImpl implements EmailService {
         String body = buildOrderHtml(order, "¡Pago Aprobado!",
                 "Hemos recibido tu pago correctamente. Pronto prepararemos tu pedido.");
         sendHtmlEmail(getOrderEmailSafe(order), subject, body);
+    }
+    @Async("mailExecutor")
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    @Override
+    public void sendPaymentApprovedAdminNotification(Long orderId) {
+        Order order = orderRepo.findWithItemsById(orderId).orElse(null);
+        if (order == null) return;
+
+        String subject = "[ADMIN] Pago Aprobado - Orden #" + order.getOrderNumber();
+        String body = buildOrderHtml(order, "¡Nueva Venta Confirmada!",
+                "Se ha recibido y aprobado el pago para la orden #" + order.getOrderNumber() + 
+                ". El usuario es: " + getOrderEmailSafe(order));
+        
+        sendHtmlEmail(adminEmail, subject, body);
     }
 
     @Async("mailExecutor")
