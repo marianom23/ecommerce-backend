@@ -98,8 +98,11 @@ public class Order {
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(name = "fullName", column = @Column(name = "billing_full_name")),
-            @AttributeOverride(name = "taxId", column = @Column(name = "billing_tax_id")),
-            @AttributeOverride(name = "email", column = @Column(name = "billing_email")),
+            @AttributeOverride(name = "documentType", column = @Column(name = "billing_document_type")),
+            @AttributeOverride(name = "documentNumber", column = @Column(name = "billing_document_number")),
+            @AttributeOverride(name = "taxCondition", column = @Column(name = "billing_tax_condition")),
+            @AttributeOverride(name = "businessName", column = @Column(name = "billing_business_name")),
+            @AttributeOverride(name = "emailForInvoices", column = @Column(name = "billing_email")),
             @AttributeOverride(name = "phone", column = @Column(name = "billing_phone")),
             @AttributeOverride(name = "street", column = @Column(name = "billing_street")),
             @AttributeOverride(name = "streetNumber", column = @Column(name = "billing_street_number")),
