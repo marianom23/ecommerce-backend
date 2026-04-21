@@ -214,19 +214,24 @@ public class PaymentServiceImpl implements PaymentService {
                     emailService.sendPaymentApprovedAdminNotification(o.getId());
 
                     // 📊 EVENTO PURCHASE (Meta)
-                    // Usar datos guardados en Payment p para "impersonar" al usuario original
                     String userIp = (p.getClientIp() != null) ? p.getClientIp() : "0.0.0.0";
                     String userAgent = (p.getUserAgent() != null) ? p.getUserAgent() : "Backend/Webhook";
                     String fbp = p.getFbp();
                     String fbc = p.getFbc();
 
+                    String userEmail = (o.getUser() != null) ? o.getUser().getEmail() : o.getGuestEmail();
+                    String firstName = (o.getUser() != null) ? o.getUser().getFirstName() : null;
+                    String lastName = (o.getUser() != null) ? o.getUser().getLastName() : null;
+
                     metaPixelService.sendEvent(
                             "Purchase",
                             userIp,
                             userAgent,
-                            frontBaseUrl + "/checkout/success", // URL lógica de éxito
+                            frontBaseUrl + "/checkout/success",
                             java.util.Arrays.asList(fbp, fbc),
-                            o.getUser(),
+                            userEmail,
+                            firstName,
+                            lastName,
                             o.getTotalAmount().doubleValue(),
                             "ARS",
                             "order-" + o.getOrderNumber());
@@ -285,10 +290,30 @@ public class PaymentServiceImpl implements PaymentService {
     public ServiceResult<OrderResponse> reviewBankTransferByAdmin(Long orderId, boolean approve, String note) {
         Order o = orderRepo.findById(orderId)
                 .orElseThrow(() -> new RecursoNoEncontradoException("Orden no encontrada"));
-        Payment p = mustPayment(o, PaymentMethod.BANK_TRANSFER);
+        // Si no tiene payment pero el admin lo va a aprobar/rechazar manualmente, lo inicializamos
+        if (o.getPayment() == null) {
+            if (o.getChosenPaymentMethod() != PaymentMethod.BANK_TRANSFER) {
+                return ServiceResult.error(HttpStatus.BAD_REQUEST, "El método de pago no es transferencia bancaria.");
+            }
+            ServiceResult<OrderResponse> initRes = initPaymentForOrder(o, PaymentMethod.BANK_TRANSFER);
+            if (!initRes.isSuccess()) {
+                return initRes;
+            }
+        }
 
-        if (p.getStatus() != PaymentStatus.PENDING) {
-            return ServiceResult.ok(orderMapper.toResponse(o));
+        Payment p = o.getPayment();
+        if (p.getMethod() != PaymentMethod.BANK_TRANSFER) {
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, "Esta operación solo es válida para transferencias bancarias.");
+        }
+
+        // Permitir revisión si está PENDING (el user confirmó) o INITIATED (el admin vio la plata antes que el user confirme)
+        if (p.getStatus() != PaymentStatus.PENDING && p.getStatus() != PaymentStatus.INITIATED) {
+            // Idempotencia: si ya está en el estado deseado, devolver OK
+            if ((approve && p.getStatus() == PaymentStatus.APPROVED) || (!approve && p.getStatus() == PaymentStatus.REJECTED)) {
+                return ServiceResult.ok(orderMapper.toResponse(o));
+            }
+            return ServiceResult.error(HttpStatus.BAD_REQUEST, 
+                "No se puede revisar un pago en estado: " + p.getStatus());
         }
 
         var prev = p.getStatus();
@@ -317,13 +342,19 @@ public class PaymentServiceImpl implements PaymentService {
             String fbp = p.getFbp();
             String fbc = p.getFbc();
 
+            String userEmail = (o.getUser() != null) ? o.getUser().getEmail() : o.getGuestEmail();
+            String firstName = (o.getUser() != null) ? o.getUser().getFirstName() : null;
+            String lastName = (o.getUser() != null) ? o.getUser().getLastName() : null;
+
             metaPixelService.sendEvent(
                     "Purchase",
                     userIp,
                     userAgent,
                     frontBaseUrl + "/checkout/success",
                     java.util.Arrays.asList(fbp, fbc),
-                    o.getUser(),
+                    userEmail,
+                    firstName,
+                    lastName,
                     o.getTotalAmount().doubleValue(),
                     "ARS",
                     "order-" + o.getOrderNumber());
@@ -601,7 +632,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private void rollbackStockAndSales(Order o) {
-        if (o.getItems() == null)
+        if (o.getItems() == null || o.getStatus() == OrderStatus.CANCELED)
             return;
 
         // Si la orden ya estaba pagada, tenemos que descontar las ventas registradas

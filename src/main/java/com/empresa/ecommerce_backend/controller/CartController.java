@@ -90,7 +90,9 @@ public class CartController {
                 request.getHeader("User-Agent"),
                 request.getRequestURL().toString(),
                 metaPixelService.extractFbpFbc(request),
-                null,
+                null, // No email for AddToCart (privacy)
+                null, // No firstName
+                null, // No lastName
                 null, // No value for AddToCart
                 "ARS",
                 dto.getEventId() // ID for deduplication
