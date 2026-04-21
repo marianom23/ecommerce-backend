@@ -222,6 +222,18 @@ public class PaymentServiceImpl implements PaymentService {
                     String userEmail = (o.getUser() != null) ? o.getUser().getEmail() : o.getGuestEmail();
                     String firstName = (o.getUser() != null) ? o.getUser().getFirstName() : null;
                     String lastName = (o.getUser() != null) ? o.getUser().getLastName() : null;
+                    Long userId = (o.getUser() != null) ? o.getUser().getId() : null;
+
+                    // Mapear ítems para el catálogo de Meta
+                    List<com.facebook.ads.sdk.serverside.Content> metaContents = o.getItems().stream()
+                            .map(item -> {
+                                com.facebook.ads.sdk.serverside.Content mc = new com.facebook.ads.sdk.serverside.Content();
+                                mc.setProductId(item.getVariant().getSku() != null ? item.getVariant().getSku() : item.getVariant().getId().toString());
+                                mc.setQuantity((long) item.getQuantity());
+                                mc.setItemPrice(item.getUnitPrice().floatValue());
+                                return mc;
+                            })
+                            .toList();
 
                     metaPixelService.sendEvent(
                             "Purchase",
@@ -232,6 +244,8 @@ public class PaymentServiceImpl implements PaymentService {
                             userEmail,
                             firstName,
                             lastName,
+                            userId,
+                            metaContents,
                             o.getTotalAmount().doubleValue(),
                             "ARS",
                             "order-" + o.getOrderNumber());
@@ -345,6 +359,18 @@ public class PaymentServiceImpl implements PaymentService {
             String userEmail = (o.getUser() != null) ? o.getUser().getEmail() : o.getGuestEmail();
             String firstName = (o.getUser() != null) ? o.getUser().getFirstName() : null;
             String lastName = (o.getUser() != null) ? o.getUser().getLastName() : null;
+            Long userId = (o.getUser() != null) ? o.getUser().getId() : null;
+
+            // Mapear ítems para el catálogo de Meta
+            List<com.facebook.ads.sdk.serverside.Content> metaContents = o.getItems().stream()
+                    .map(item -> {
+                        com.facebook.ads.sdk.serverside.Content mc = new com.facebook.ads.sdk.serverside.Content();
+                        mc.setProductId(item.getVariant().getSku() != null ? item.getVariant().getSku() : item.getVariant().getId().toString());
+                        mc.setQuantity((long) item.getQuantity());
+                        mc.setItemPrice(item.getUnitPrice().floatValue());
+                        return mc;
+                    })
+                    .toList();
 
             metaPixelService.sendEvent(
                     "Purchase",
@@ -355,6 +381,8 @@ public class PaymentServiceImpl implements PaymentService {
                     userEmail,
                     firstName,
                     lastName,
+                    userId,
+                    metaContents,
                     o.getTotalAmount().doubleValue(),
                     "ARS",
                     "order-" + o.getOrderNumber());

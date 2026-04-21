@@ -83,19 +83,25 @@ public class CartController {
         
         // 📊 Enviar evento AddToCart a Meta
         if (result.getData() != null) {
-            // No enviamos info del usuario para AddToCart (privacy-first)
+            // Mapear el ítem agregado
+            com.facebook.ads.sdk.serverside.Content metaContent = new com.facebook.ads.sdk.serverside.Content();
+            metaContent.setProductId(dto.getVariantId() != null ? dto.getVariantId().toString() : dto.getProductId().toString());
+            metaContent.setQuantity((long) dto.getQuantity());
+
             metaPixelService.sendEvent(
                 "AddToCart",
                 metaPixelService.extractClientIp(request),
                 request.getHeader("User-Agent"),
                 request.getRequestURL().toString(),
                 metaPixelService.extractFbpFbc(request),
-                null, // No email for AddToCart (privacy)
-                null, // No firstName
-                null, // No lastName
-                null, // No value for AddToCart
+                null, 
+                null, 
+                null, 
+                userId, // external_id
+                java.util.List.of(metaContent),
+                null, 
                 "ARS",
-                dto.getEventId() // ID for deduplication
+                dto.getEventId()
             );
         }
         

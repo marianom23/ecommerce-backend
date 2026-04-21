@@ -59,6 +59,8 @@ public class AuthController {
                 dto.getEmail(),
                 dto.getFirstName(),
                 dto.getLastName(),
+                user.getId(), // external_id
+                null, // No contents for registration
                 null,
                 "ARS",
                 null // No deduplication ID for registration yet
