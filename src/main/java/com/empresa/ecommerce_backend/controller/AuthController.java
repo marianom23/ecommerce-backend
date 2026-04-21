@@ -50,17 +50,15 @@ public class AuthController {
         // 📊 Enviar evento CompleteRegistration a Meta
         if (result.getData() != null && result.getStatus() != null && result.getStatus().is2xxSuccessful()) {
             RegisterUserResponse user = result.getData();
-            // Crear un User temporal para el evento (solo con email)
-            com.empresa.ecommerce_backend.model.User tempUser = new com.empresa.ecommerce_backend.model.User();
-            tempUser.setEmail(user.getEmail());
-            
             metaPixelService.sendEvent(
                 "CompleteRegistration",
                 metaPixelService.extractClientIp(request),
                 request.getHeader("User-Agent"),
                 request.getRequestURL().toString(),
                 metaPixelService.extractFbpFbc(request),
-                tempUser,
+                dto.getEmail(),
+                dto.getFirstName(),
+                dto.getLastName(),
                 null,
                 "ARS",
                 null // No deduplication ID for registration yet

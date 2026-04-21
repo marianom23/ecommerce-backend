@@ -52,7 +52,9 @@ public class MetaPixelService {
                           String userAgent, 
                           String sourceUrl,
                           List<String> fbpFbcCookies, // [fbp, fbc] values or null
-                          User user, 
+                          String email,
+                          String firstName,
+                          String lastName,
                           Double value, 
                           String currency, 
                           String eventId) {
@@ -65,10 +67,18 @@ public class MetaPixelService {
                     .clientIpAddress(clientIp)
                     .clientUserAgent(userAgent);
 
-            // Email hasheado (si hay usuario)
-            if (user != null && user.getEmail() != null) {
-                String hashedEmail = hashSHA256(user.getEmail().toLowerCase().trim());
+            // Email hasheado
+            if (email != null && !email.isBlank()) {
+                String hashedEmail = hashSHA256(email.toLowerCase().trim());
                 userData.emails(Arrays.asList(hashedEmail));
+            }
+
+            // Nombres hasheados (Mejora calidad de coincidencia)
+            if (firstName != null && !firstName.isBlank()) {
+                userData.firstNames(Arrays.asList(hashSHA256(firstName.toLowerCase().trim())));
+            }
+            if (lastName != null && !lastName.isBlank()) {
+                userData.lastNames(Arrays.asList(hashSHA256(lastName.toLowerCase().trim())));
             }
 
             // Cookies de Facebook pasadas explícitamente
