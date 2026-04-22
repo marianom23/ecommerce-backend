@@ -43,18 +43,19 @@ public class MetaPixelService {
      * @param eventId   ID único para deduplicación con frontend (opcional)
      */
     /**
-     * Envía un evento a Meta Conversions API de forma asíncrona.
-     * EVITA pasar HttpServletRequest a métodos Async para prevenir condiciones de carrera.
+     * Envía un evento a Meta Conversions API de forma asíncrona con datos enriquecidos.
      */
     @Async
     public void sendEvent(String eventName, 
                           String clientIp, 
                           String userAgent, 
                           String sourceUrl,
-                          List<String> fbpFbcCookies, // [fbp, fbc] values or null
+                          List<String> fbpFbcCookies,
                           String email,
                           String firstName,
                           String lastName,
+                          Long userId,        // <--- NUEVO: Para external_id
+                          List<Content> contents, // <--- NUEVO: Para Catálogo
                           Double value, 
                           String currency, 
                           String eventId) {
@@ -62,18 +63,15 @@ public class MetaPixelService {
             APIContext context = new APIContext(accessToken);
             if (testMode) context.enableDebug(true);
 
-            // 1. Datos del Usuario
+            // 1. Datos del Usuario (PII)
             UserData userData = new UserData()
                     .clientIpAddress(clientIp)
                     .clientUserAgent(userAgent);
 
-            // Email hasheado
             if (email != null && !email.isBlank()) {
-                String hashedEmail = hashSHA256(email.toLowerCase().trim());
-                userData.emails(Arrays.asList(hashedEmail));
+                userData.emails(Arrays.asList(hashSHA256(email.toLowerCase().trim())));
             }
 
-            // Nombres hasheados (Mejora calidad de coincidencia)
             if (firstName != null && !firstName.isBlank()) {
                 userData.firstNames(Arrays.asList(hashSHA256(firstName.toLowerCase().trim())));
             }
@@ -81,7 +79,11 @@ public class MetaPixelService {
                 userData.lastNames(Arrays.asList(hashSHA256(lastName.toLowerCase().trim())));
             }
 
-            // Cookies de Facebook pasadas explícitamente
+            // External ID es el ID de tu DB (muy fuerte para matching)
+            if (userId != null) {
+                userData.externalIds(Arrays.asList(hashSHA256(userId.toString())));
+            }
+
             if (fbpFbcCookies != null && fbpFbcCookies.size() >= 1 && fbpFbcCookies.get(0) != null) {
                 userData.fbp(fbpFbcCookies.get(0));
             }
@@ -92,35 +94,41 @@ public class MetaPixelService {
             // 2. Crear el Evento
             Event event = new Event();
             event.eventName(eventName);
-            event.eventTime(System.currentTimeMillis() / 1000L); // Unix timestamp
+            event.eventTime(System.currentTimeMillis() / 1000L);
             event.userData(userData);
             event.eventSourceUrl(sourceUrl);
             event.actionSource(ActionSource.website);
 
-            // Event ID para deduplicación
             if (eventId != null && !eventId.isBlank()) {
                 event.eventId(eventId);
             }
 
-            // Custom Data (valor monetario)
+            // 3. Custom Data (Valor + Productos)
+            CustomData customData = new CustomData();
+            customData.setCurrency(currency != null ? currency : "ARS");
+
             if (value != null && value > 0) {
-                CustomData customData = new CustomData()
-                        .value(value.floatValue())
-                        .currency(currency != null ? currency : "ARS");
-                event.customData(customData);
+                customData.setValue(value.floatValue());
             }
 
-            // 3. Enviar a Meta
+            if (contents != null && !contents.isEmpty()) {
+                customData.setContents(contents);
+                customData.setContentType("product");
+            }
+            
+            event.customData(customData);
+
+            // 4. Enviar a Meta
             EventRequest eventRequest = new EventRequest(pixelId, context);
             eventRequest.addDataItem(event);
 
             if (testMode && testCode != null && !testCode.isEmpty()) {
-                eventRequest.testEventCode(testCode); // Para ver en Test Events
+                eventRequest.testEventCode(testCode);
             }
 
             EventResponse response = eventRequest.execute();
-            log.info("✅ Meta Event Sent: {} | Events Received: {}", 
-                     eventName, response.getEventsReceived());
+            log.info("✅ Meta Event Sent: {} | ID: {} | Received: {}", 
+                     eventName, eventId, response.getEventsReceived());
 
         } catch (Exception e) {
             log.error("❌ Error sending Meta event: {}", eventName, e);
