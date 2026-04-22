@@ -57,6 +57,7 @@ public class AuthController {
                 request.getRequestURL().toString(),
                 metaPixelService.extractFbpFbc(request),
                 dto.getEmail(),
+                null, // phone - registration doesn't usually capture it
                 dto.getFirstName(),
                 dto.getLastName(),
                 user.getId(), // external_id

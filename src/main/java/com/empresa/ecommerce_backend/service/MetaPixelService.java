@@ -52,6 +52,7 @@ public class MetaPixelService {
                           String sourceUrl,
                           List<String> fbpFbcCookies,
                           String email,
+                          String phone,        // <--- AÑADIDO
                           String firstName,
                           String lastName,
                           Long userId,        // <--- NUEVO: Para external_id
@@ -77,6 +78,14 @@ public class MetaPixelService {
             }
             if (lastName != null && !lastName.isBlank()) {
                 userData.lastNames(Arrays.asList(hashSHA256(lastName.toLowerCase().trim())));
+            }
+            if (phone != null && !phone.isBlank()) {
+                String cleanPhone = phone.replaceAll("[^0-9]", "");
+                if (!cleanPhone.isEmpty()) {
+                    userData.phones(Arrays.asList(hashSHA256(cleanPhone)));
+                } else {
+                    userData.phones(Arrays.asList(hashSHA256(phone.trim())));
+                }
             }
 
             // External ID es el ID de tu DB (muy fuerte para matching)

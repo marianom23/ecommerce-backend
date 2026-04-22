@@ -10,4 +10,6 @@ public class UpdateProfileRequest {
 
     @NotBlank(message = "El apellido es obligatorio")
     private String lastName;
+
+    private String phone;
 }

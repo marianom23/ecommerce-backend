@@ -10,5 +10,6 @@ public class UserMeResponse {
     private String firstName;
     private String lastName;
     private boolean verified;
+    private String phone;
     private Set<String> roles;
 }

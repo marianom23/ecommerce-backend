@@ -119,6 +119,49 @@ public class PaymentServiceImpl implements PaymentService {
         // 📧 Notificar nueva orden
         emailService.sendOrderConfirmation(o.getId());
 
+        // 📊 EVENTO INITIATE CHECKOUT (Meta)
+        try {
+            String userIp = (p.getClientIp() != null) ? p.getClientIp() : "0.0.0.0";
+            String userAgent = (p.getUserAgent() != null) ? p.getUserAgent() : "Backend/System";
+            String userEmail = (o.getUser() != null) ? o.getUser().getEmail() : o.getGuestEmail();
+            String firstName = (o.getUser() != null) ? o.getUser().getFirstName() : null;
+            String lastName = (o.getUser() != null) ? o.getUser().getLastName() : null;
+            String phone = (o.getUser() != null && o.getUser().getPhone() != null) 
+                    ? o.getUser().getPhone() 
+                    : (o.getBillingInfo() != null && o.getBillingInfo().getPhone() != null ? o.getBillingInfo().getPhone() 
+                        : (o.getShippingAddress() != null ? o.getShippingAddress().getPhone() : null));
+            Long userId = (o.getUser() != null) ? o.getUser().getId() : null;
+
+            List<com.facebook.ads.sdk.serverside.Content> metaContents = o.getItems().stream()
+                    .map(item -> {
+                        com.facebook.ads.sdk.serverside.Content mc = new com.facebook.ads.sdk.serverside.Content();
+                        mc.setProductId(item.getVariant().getSku() != null ? item.getVariant().getSku() : item.getVariant().getId().toString());
+                        mc.setQuantity((long) item.getQuantity());
+                        mc.setItemPrice(item.getUnitPrice().floatValue());
+                        return mc;
+                    })
+                    .toList();
+
+            metaPixelService.sendEvent(
+                    "InitiateCheckout",
+                    userIp,
+                    userAgent,
+                    frontBaseUrl + "/checkout", // A basic url representation
+                    java.util.Arrays.asList(p.getFbp(), p.getFbc()),
+                    userEmail,
+                    phone,
+                    firstName,
+                    lastName,
+                    userId,
+                    metaContents,
+                    o.getTotalAmount().doubleValue(),
+                    "ARS",
+                    "init-" + o.getOrderNumber());
+        } catch (Exception e) {
+            // No interrumpir el flujo de compra si falla Meta
+            System.err.println("❌ Error enviando InitiateCheckout a Meta: " + e.getMessage());
+        }
+
         return ServiceResult.ok(orderMapper.toResponse(o));
     }
 
@@ -222,6 +265,10 @@ public class PaymentServiceImpl implements PaymentService {
                     String userEmail = (o.getUser() != null) ? o.getUser().getEmail() : o.getGuestEmail();
                     String firstName = (o.getUser() != null) ? o.getUser().getFirstName() : null;
                     String lastName = (o.getUser() != null) ? o.getUser().getLastName() : null;
+                    String phone = (o.getUser() != null && o.getUser().getPhone() != null) 
+                            ? o.getUser().getPhone() 
+                            : (o.getBillingInfo() != null && o.getBillingInfo().getPhone() != null ? o.getBillingInfo().getPhone() 
+                                : (o.getShippingAddress() != null ? o.getShippingAddress().getPhone() : null));
                     Long userId = (o.getUser() != null) ? o.getUser().getId() : null;
 
                     // Mapear ítems para el catálogo de Meta
@@ -242,6 +289,7 @@ public class PaymentServiceImpl implements PaymentService {
                             frontBaseUrl + "/checkout/success",
                             java.util.Arrays.asList(fbp, fbc),
                             userEmail,
+                            phone, // <-- Added phone
                             firstName,
                             lastName,
                             userId,
@@ -359,6 +407,10 @@ public class PaymentServiceImpl implements PaymentService {
             String userEmail = (o.getUser() != null) ? o.getUser().getEmail() : o.getGuestEmail();
             String firstName = (o.getUser() != null) ? o.getUser().getFirstName() : null;
             String lastName = (o.getUser() != null) ? o.getUser().getLastName() : null;
+            String phone = (o.getUser() != null && o.getUser().getPhone() != null) 
+                    ? o.getUser().getPhone() 
+                    : (o.getBillingInfo() != null && o.getBillingInfo().getPhone() != null ? o.getBillingInfo().getPhone() 
+                        : (o.getShippingAddress() != null ? o.getShippingAddress().getPhone() : null));
             Long userId = (o.getUser() != null) ? o.getUser().getId() : null;
 
             // Mapear ítems para el catálogo de Meta
@@ -379,6 +431,7 @@ public class PaymentServiceImpl implements PaymentService {
                     frontBaseUrl + "/checkout/success",
                     java.util.Arrays.asList(fbp, fbc),
                     userEmail,
+                    phone, // <-- Added phone
                     firstName,
                     lastName,
                     userId,
