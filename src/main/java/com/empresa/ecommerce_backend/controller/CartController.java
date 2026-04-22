@@ -17,6 +17,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 
+import com.empresa.ecommerce_backend.repository.UserRepository;
+
 @RestController
 @RequestMapping("/api/cart")
 @RequiredArgsConstructor
@@ -25,6 +27,7 @@ public class CartController {
     private final CartService cartService;
     private final CartCookieManager cookieManager;
     private final MetaPixelService metaPixelService;
+    private final UserRepository userRepository;
 
     /* =================== ATTACH =================== */
     @PreAuthorize("isAuthenticated()")
@@ -83,6 +86,18 @@ public class CartController {
         
         // 📊 Enviar evento AddToCart a Meta
         if (result.getData() != null) {
+            // Obtener el usuario de la DB si está autenticado
+            String email = null, phone = null, fn = null, ln = null;
+            if (userId != null) {
+                var dbUser = userRepository.findById(userId).orElse(null);
+                if (dbUser != null) {
+                    email = dbUser.getEmail();
+                    phone = dbUser.getPhone();
+                    fn = dbUser.getFirstName();
+                    ln = dbUser.getLastName();
+                }
+            }
+
             // Mapear el ítem agregado
             com.facebook.ads.sdk.serverside.Content metaContent = new com.facebook.ads.sdk.serverside.Content();
             metaContent.setProductId(dto.getVariantId() != null ? dto.getVariantId().toString() : dto.getProductId().toString());
@@ -94,9 +109,10 @@ public class CartController {
                 request.getHeader("User-Agent"),
                 request.getRequestURL().toString(),
                 metaPixelService.extractFbpFbc(request),
-                null, 
-                null, 
-                null, 
+                email, 
+                phone, 
+                fn, 
+                ln, 
                 userId, // external_id
                 java.util.List.of(metaContent),
                 null, 

@@ -45,6 +45,7 @@ public interface UserMapper {
             @Mapping(source = "user.firstName",  target = "firstName"),
             @Mapping(source = "user.lastName",   target = "lastName"),
             @Mapping(source = "user.verified",   target = "verified"),
+            // @Mapping(source = "user.phone", target = "phone") -- if LoginResponse needs it, but it seems LoginResponse might not have phone. Let's skip mapping it to LoginResponse unless we know it's there. Note: wait, I will map it if target has it, but LoginResponse is not modified here.
             @Mapping(
                     target = "provider",
                     expression = "java(user.getAuthProvider()!=null ? user.getAuthProvider().name() : \"LOCAL\")"
@@ -93,6 +94,7 @@ public interface UserMapper {
             @Mapping(source = "firstName", target = "firstName"),
             @Mapping(source = "lastName",  target = "lastName"),
             @Mapping(source = "verified",  target = "verified"),
+            @Mapping(source = "phone",     target = "phone"),
             @Mapping(
                     target = "roles",
                     expression = "java(user.getRoles().stream()" +
